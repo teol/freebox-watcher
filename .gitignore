@@ -1,0 +1,7 @@
+.env
+node_modules/*
+logs/*
+!logs/.gitkeep
+*.log
+.yarn/*.gz
+.DS_Store
