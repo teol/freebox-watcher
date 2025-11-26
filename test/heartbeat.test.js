@@ -66,15 +66,6 @@ describe('Heartbeat Routes', () => {
 
         assert.strictEqual(response.statusCode, 400);
     });
-
-    it('should reject GET /heartbeat/last without authentication', async () => {
-        const response = await fastify.inject({
-            method: 'GET',
-            url: '/heartbeat/last',
-        });
-
-        assert.strictEqual(response.statusCode, 401);
-    });
 });
 
 describe('HeartbeatService', () => {

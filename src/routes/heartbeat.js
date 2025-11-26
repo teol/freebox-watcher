@@ -69,35 +69,4 @@ export async function heartbeatRoutes(fastify, options) {
             }
         }
     );
-
-    /**
-     * GET /heartbeat/last
-     * Get the last heartbeat
-     */
-    fastify.get(
-        '/heartbeat/last',
-        {
-            preHandler: authMiddleware,
-        },
-        async (request, reply) => {
-            try {
-                const lastHeartbeat = await heartbeatService.getLastHeartbeat();
-
-                if (!lastHeartbeat) {
-                    return reply.code(404).send({
-                        error: 'Not Found',
-                        message: 'No heartbeats found',
-                    });
-                }
-
-                return reply.code(200).send(lastHeartbeat);
-            } catch (error) {
-                fastify.log.error({ error }, 'Failed to fetch last heartbeat');
-                return reply.code(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to fetch last heartbeat',
-                });
-            }
-        }
-    );
 }
