@@ -1,0 +1,40 @@
+{
+    "name": "freebox-watcher",
+    "version": "1.0.0",
+    "description": "A monitoring service for Freebox Delta that tracks uptime and alerts on downtime events",
+    "main": "src/index.js",
+    "type": "module",
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "scripts": {
+        "start": "node src/index.js",
+        "dev": "node --watch src/index.js",
+        "test": "node --test test/**/*.test.js",
+        "test:coverage": "node --test --experimental-test-coverage test/**/*.test.js",
+        "migrate": "node src/db/migrate.js",
+        "migrate:rollback": "node src/db/rollback.js",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "keywords": [
+        "freebox",
+        "monitoring",
+        "heartbeat",
+        "uptime",
+        "alerts"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "dotenv": "^16.4.7",
+        "fastify": "^5.2.0",
+        "knex": "^3.1.0",
+        "mysql2": "^3.11.5",
+        "pino": "^9.5.0",
+        "pino-pretty": "^13.0.0"
+    },
+    "devDependencies": {
+        "prettier": "^3.4.2"
+    }
+}
