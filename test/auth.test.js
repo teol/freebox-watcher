@@ -1,0 +1,82 @@
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert';
+import Fastify from 'fastify';
+import { authMiddleware } from '../src/middleware/auth.js';
+
+describe('Authentication Middleware', () => {
+    let fastify;
+
+    before(async () => {
+        // Set up test environment
+        process.env.API_KEY = 'test-api-key-12345';
+
+        fastify = Fastify({ logger: false });
+
+        // Register a test route with auth middleware
+        fastify.get('/test-protected', { preHandler: authMiddleware }, async (request, reply) => {
+            return { message: 'success' };
+        });
+
+        await fastify.ready();
+    });
+
+    after(async () => {
+        await fastify.close();
+    });
+
+    it('should reject requests without Authorization header', async () => {
+        const response = await fastify.inject({
+            method: 'GET',
+            url: '/test-protected',
+        });
+
+        assert.strictEqual(response.statusCode, 401);
+        const body = JSON.parse(response.body);
+        assert.strictEqual(body.error, 'Unauthorized');
+        assert.strictEqual(body.message, 'Missing Authorization header');
+    });
+
+    it('should reject requests with invalid Authorization header format', async () => {
+        const response = await fastify.inject({
+            method: 'GET',
+            url: '/test-protected',
+            headers: {
+                authorization: 'InvalidFormat token',
+            },
+        });
+
+        assert.strictEqual(response.statusCode, 401);
+        const body = JSON.parse(response.body);
+        assert.strictEqual(body.error, 'Unauthorized');
+        assert.ok(body.message.includes('Invalid Authorization header format'));
+    });
+
+    it('should reject requests with invalid API key', async () => {
+        const response = await fastify.inject({
+            method: 'GET',
+            url: '/test-protected',
+            headers: {
+                authorization: 'Bearer wrong-api-key',
+            },
+        });
+
+        assert.strictEqual(response.statusCode, 401);
+        const body = JSON.parse(response.body);
+        assert.strictEqual(body.error, 'Unauthorized');
+        assert.strictEqual(body.message, 'Invalid API key');
+    });
+
+    it('should accept requests with valid API key', async () => {
+        const response = await fastify.inject({
+            method: 'GET',
+            url: '/test-protected',
+            headers: {
+                authorization: 'Bearer test-api-key-12345',
+            },
+        });
+
+        assert.strictEqual(response.statusCode, 200);
+        const body = JSON.parse(response.body);
+        assert.strictEqual(body.message, 'success');
+    });
+});
