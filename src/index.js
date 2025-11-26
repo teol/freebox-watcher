@@ -2,7 +2,6 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import { testConnection, closeConnection } from './db/config.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
-import { healthRoutes } from './routes/health.js';
 
 /**
  * Create Fastify instance with Pino logger
@@ -28,7 +27,6 @@ const fastify = Fastify({
  * Register routes
  */
 async function registerRoutes() {
-    await fastify.register(healthRoutes);
     await fastify.register(heartbeatRoutes);
 }
 
