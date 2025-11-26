@@ -100,48 +100,6 @@ HEARTBEAT_TIMEOUT=300000
 - `LOG_LEVEL`: Logging level (trace, debug, info, warn, error, fatal)
 - `HEARTBEAT_TIMEOUT`: Time in milliseconds before considering a missed heartbeat (default: 5 minutes)
 
-## API Endpoints
-
-### POST /heartbeat
-
-Receives a heartbeat signal from the monitored Freebox.
-
-**Headers:**
-
-- `Authorization`: Bearer {API_KEY}
-
-**Request Body:**
-
-```json
-{
-    "status": "online",
-    "timestamp": "2025-11-26T12:00:00Z"
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "message": "Heartbeat recorded"
-}
-```
-
-### GET /health
-
-Health check endpoint.
-
-**Response:**
-
-```json
-{
-    "status": "ok",
-    "uptime": 12345,
-    "database": "connected"
-}
-```
-
 ## Database Schema
 
 The service uses the following tables:
@@ -153,34 +111,6 @@ Run migrations to create the schema:
 
 ```bash
 npm run migrate
-```
-
-## Development
-
-### Running in Development Mode
-
-```bash
-npm run dev
-```
-
-### Running Tests
-
-```bash
-npm test
-```
-
-### Code Formatting
-
-This project uses Prettier for code formatting with the following configuration:
-
-- 4-space indentation
-- Semicolons required
-- Single quotes for strings
-
-Format your code before committing:
-
-```bash
-npx prettier -w .
 ```
 
 ## Production Deployment
@@ -223,16 +153,6 @@ pm2 start ecosystem.config.js
 pm2 save
 ```
 
-## Contributing
-
-Contributions are welcome! Please follow the guidelines in [AGENTS.md](./AGENTS.md).
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and format code
-5. Submit a pull request
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
@@ -240,7 +160,3 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 ## Related Projects
 
 - [teol/freebox-heartbeat](https://github.com/teol/freebox-heartbeat) - The companion project that sends heartbeat requests to this service
-
-## Support
-
-For issues and questions, please use the [GitHub Issues](https://github.com/teol/freebox-watcher/issues) page.
