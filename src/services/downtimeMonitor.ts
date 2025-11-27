@@ -72,7 +72,7 @@ export class DowntimeMonitor {
      */
     stop(): void {
         if (this.intervalId) {
-            clearInterval(this.intervalId);
+            clearTimeout(this.intervalId);
             this.intervalId = null;
             this.logger.info('Downtime monitor stopped');
         }
