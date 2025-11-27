@@ -72,14 +72,19 @@ export class NotificationService {
     /**
      * Send initial downtime alert
      */
-    async sendDowntimeAlert(data: DowntimeNotificationData): Promise<void> {
+    async sendDowntimeAlert(
+        data: DowntimeNotificationData,
+        heartbeatTimeoutMs: number
+    ): Promise<void> {
+        const heartbeatTimeoutMinutes = Math.floor(heartbeatTimeoutMs / 60000);
+
         const message = [
             '🔴 *Downtime Detected*',
             '',
             `Started: ${data.startedAt.toISOString()}`,
             `ID: ${data.downtimeId}`,
             '',
-            `No heartbeat received for ${Number.parseInt(process.env.HEARTBEAT_TIMEOUT ?? '300000', 10) / 60000} minutes.`,
+            `No heartbeat received for ${heartbeatTimeoutMinutes} minutes.`,
         ].join('\n');
 
         await this.sendMessage(message);
@@ -88,8 +93,12 @@ export class NotificationService {
     /**
      * Send confirmed downtime alert (after 30 additional minutes)
      */
-    async sendDowntimeConfirmedAlert(data: DowntimeNotificationData): Promise<void> {
+    async sendDowntimeConfirmedAlert(
+        data: DowntimeNotificationData,
+        confirmationDelayMs: number
+    ): Promise<void> {
         const durationMinutes = Math.floor((Date.now() - data.startedAt.getTime()) / 60000);
+        const confirmationDelayMinutes = Math.floor(confirmationDelayMs / 60000);
 
         const message = [
             '⚠️ *Downtime Confirmed*',
@@ -98,7 +107,7 @@ export class NotificationService {
             `Duration: ${durationMinutes} minutes`,
             `ID: ${data.downtimeId}`,
             '',
-            `Service has been down for over ${Number.parseInt(process.env.DOWNTIME_CONFIRMATION_DELAY ?? '1800000', 10) / 60000} minutes.`,
+            `Service has been down for over ${confirmationDelayMinutes} minutes.`,
         ].join('\n');
 
         await this.sendMessage(message);

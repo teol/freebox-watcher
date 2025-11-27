@@ -123,10 +123,13 @@ export class DowntimeMonitor {
 
         // Send initial notification
         if (this.notificationService.isEnabled()) {
-            await this.notificationService.sendDowntimeAlert({
-                downtimeId,
-                startedAt: downtimeStartedAt,
-            });
+            await this.notificationService.sendDowntimeAlert(
+                {
+                    downtimeId,
+                    startedAt: downtimeStartedAt,
+                },
+                this.heartbeatTimeoutMs
+            );
         }
     }
 
@@ -152,10 +155,13 @@ export class DowntimeMonitor {
             );
 
             if (this.notificationService.isEnabled()) {
-                await this.notificationService.sendDowntimeConfirmedAlert({
-                    downtimeId: downtime.id,
-                    startedAt: downtime.started_at,
-                });
+                await this.notificationService.sendDowntimeConfirmedAlert(
+                    {
+                        downtimeId: downtime.id,
+                        startedAt: downtime.started_at,
+                    },
+                    this.confirmationDelayMs
+                );
             }
         }
     }
