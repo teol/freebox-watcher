@@ -2,7 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { heartbeatRoutes } from '../src/routes/heartbeat.js';
-import { type HeartbeatInsert } from '../src/services/heartbeat.js';
+import { type HeartbeatInput } from '../src/services/heartbeat.js';
 
 interface HeartbeatResponseBody {
     success?: boolean;
@@ -76,7 +76,7 @@ describe('Heartbeat Routes', () => {
 
 describe('HeartbeatService', () => {
     it('should validate heartbeat data structure', () => {
-        const validData: HeartbeatInsert = {
+        const validData: HeartbeatInput = {
             status: 'online',
             timestamp: new Date().toISOString(),
         };
@@ -86,13 +86,13 @@ describe('HeartbeatService', () => {
     });
 
     it('should handle metadata as optional field', () => {
-        const dataWithMetadata: HeartbeatInsert = {
+        const dataWithMetadata: HeartbeatInput = {
             status: 'online',
             timestamp: new Date().toISOString(),
             metadata: { version: '1.0.0' },
         };
 
-        const dataWithoutMetadata: HeartbeatInsert = {
+        const dataWithoutMetadata: HeartbeatInput = {
             status: 'online',
             timestamp: new Date().toISOString(),
         };

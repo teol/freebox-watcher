@@ -16,8 +16,10 @@
         "watch": "ts-node --esm --watch src/index.ts",
         "test": "node --loader ts-node/esm --test test/**/*.test.ts",
         "test:coverage": "node --loader ts-node/esm --test --experimental-test-coverage test/**/*.test.ts",
-        "migrate": "ts-node --esm src/db/migrate.ts",
-        "migrate:rollback": "ts-node --esm src/db/rollback.ts",
+        "db:migrate": "knex --esm migrate:latest",
+        "db:rollback": "knex --esm migrate:rollback",
+        "db:status": "knex --esm migrate:status",
+        "db:make": "knex --esm migrate:make",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },
