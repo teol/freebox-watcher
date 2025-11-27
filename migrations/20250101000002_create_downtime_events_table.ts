@@ -3,8 +3,8 @@ import type { Knex } from 'knex';
 /**
  * Create downtime_events table
  */
-export async function up(knexInstance: Knex): Promise<void> {
-    await knexInstance.schema.createTable('downtime_events', (table) => {
+export async function up(knex: Knex): Promise<void> {
+    await knex.schema.createTable('downtime_events', (table) => {
         table.increments('id').primary();
         table.timestamp('started_at').notNullable();
         table.timestamp('ended_at').nullable();
@@ -19,6 +19,6 @@ export async function up(knexInstance: Knex): Promise<void> {
 /**
  * Drop downtime_events table
  */
-export async function down(knexInstance: Knex): Promise<void> {
-    await knexInstance.schema.dropTableIfExists('downtime_events');
+export async function down(knex: Knex): Promise<void> {
+    await knex.schema.dropTableIfExists('downtime_events');
 }

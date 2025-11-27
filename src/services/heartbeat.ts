@@ -1,14 +1,15 @@
 import { db } from '../db/config.js';
+import type { HeartbeatsTable, HeartbeatsInsert } from '../types/database.js';
 
 export interface HeartbeatRecord {
     id: number;
     status: string;
     timestamp: Date;
-    received_at?: Date;
-    metadata?: Record<string, unknown> | null;
+    received_at: Date;
+    metadata: Record<string, unknown> | null;
 }
 
-export interface HeartbeatInsert {
+export interface HeartbeatInput {
     status: string;
     timestamp: string | Date;
     metadata?: Record<string, unknown> | null;
@@ -23,14 +24,16 @@ export class HeartbeatService {
      * @param heartbeatData The heartbeat data
      * @returns The ID of the inserted heartbeat
      */
-    async recordHeartbeat(heartbeatData: HeartbeatInsert): Promise<number> {
+    async recordHeartbeat(heartbeatData: HeartbeatInput): Promise<number> {
         const { status, timestamp, metadata = null } = heartbeatData;
 
-        const [id] = await db('heartbeats').insert({
+        const insertData: HeartbeatsInsert = {
             status,
             timestamp: new Date(timestamp),
             metadata: metadata ? JSON.stringify(metadata) : null,
-        });
+        };
+
+        const [id] = await db<HeartbeatsTable>('heartbeats').insert(insertData);
 
         return id as number;
     }
@@ -40,11 +43,18 @@ export class HeartbeatService {
      * @returns The last heartbeat or null if none exists
      */
     async getLastHeartbeat(): Promise<HeartbeatRecord | null> {
-        const heartbeat = await db<HeartbeatRecord>('heartbeats')
+        const heartbeat = await db<HeartbeatsTable>('heartbeats')
             .orderBy('timestamp', 'desc')
             .first();
 
-        return heartbeat ?? null;
+        if (!heartbeat) {
+            return null;
+        }
+
+        return {
+            ...heartbeat,
+            metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
+        };
     }
 
     /**
@@ -72,9 +82,14 @@ export class HeartbeatService {
      * @returns Array of heartbeats
      */
     async getHeartbeatsInRange(startDate: Date, endDate: Date): Promise<HeartbeatRecord[]> {
-        return await db<HeartbeatRecord>('heartbeats')
+        const heartbeats = await db<HeartbeatsTable>('heartbeats')
             .whereBetween('timestamp', [startDate, endDate])
             .orderBy('timestamp', 'asc');
+
+        return heartbeats.map((heartbeat) => ({
+            ...heartbeat,
+            metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
+        }));
     }
 
     /**
@@ -86,7 +101,7 @@ export class HeartbeatService {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 
-        return await db('heartbeats').where('timestamp', '<', cutoffDate).delete();
+        return await db<HeartbeatsTable>('heartbeats').where('timestamp', '<', cutoffDate).delete();
     }
 }
 

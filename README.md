@@ -63,7 +63,7 @@ cp .env.example .env
 5. Run database migrations:
 
 ```bash
-yarn migrate
+yarn db:migrate
 ```
 
 6. Build the service:
@@ -84,7 +84,10 @@ yarn start
 - `yarn watch` - Run the API in watch mode with automatic reloads
 - `yarn build` - Compile the TypeScript sources to `dist`
 - `yarn test` - Execute the test suite with Node's test runner
-- `yarn migrate` / `yarn migrate:rollback` - Apply or roll back database migrations
+- `yarn db:migrate` - Apply pending database migrations
+- `yarn db:rollback` - Roll back the last batch of migrations
+- `yarn db:status` - Check migration status
+- `yarn db:make <name>` - Create a new migration file
 - `yarn format` - Format the codebase with Prettier
 
 ## Configuration
@@ -132,7 +135,7 @@ The service uses the following tables:
 Run migrations to create the schema:
 
 ```bash
-yarn migrate
+yarn db:migrate
 ```
 
 ## Production Deployment

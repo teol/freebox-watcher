@@ -1,12 +1,17 @@
 import { db } from '../db/config.js';
+import type {
+    DowntimeEventsTable,
+    DowntimeEventsInsert,
+    DowntimeEventsUpdate,
+} from '../types/database.js';
 
 export interface DowntimeEvent {
     id: number;
     started_at: Date;
-    ended_at?: Date | null;
-    duration?: number | null;
+    ended_at: Date | null;
+    duration: number | null;
     is_active: boolean;
-    notes?: string | null;
+    notes: string | null;
 }
 
 /**
@@ -20,11 +25,13 @@ export class DowntimeService {
      * @returns The ID of the created downtime event
      */
     async createDowntimeEvent(startedAt: Date, notes: string | null = null): Promise<number> {
-        const [id] = await db('downtime_events').insert({
+        const insertData: DowntimeEventsInsert = {
             started_at: startedAt,
             is_active: true,
             notes,
-        });
+        };
+
+        const [id] = await db<DowntimeEventsTable>('downtime_events').insert(insertData);
 
         return id as number;
     }
@@ -35,7 +42,9 @@ export class DowntimeService {
      * @param endedAt When the downtime ended
      */
     async endDowntimeEvent(id: number, endedAt: Date): Promise<void> {
-        const downtimeEvent = await db<DowntimeEvent>('downtime_events').where('id', id).first();
+        const downtimeEvent = await db<DowntimeEventsTable>('downtime_events')
+            .where('id', id)
+            .first();
 
         if (!downtimeEvent) {
             throw new Error(`Downtime event with ID ${id} not found`);
@@ -44,11 +53,13 @@ export class DowntimeService {
         const startedAt = new Date(downtimeEvent.started_at);
         const duration = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
 
-        await db('downtime_events').where('id', id).update({
+        const updateData: DowntimeEventsUpdate = {
             ended_at: endedAt,
             duration,
             is_active: false,
-        });
+        };
+
+        await db<DowntimeEventsTable>('downtime_events').where('id', id).update(updateData);
     }
 
     /**
@@ -56,7 +67,7 @@ export class DowntimeService {
      * @returns Active downtime event or null
      */
     async getActiveDowntimeEvent(): Promise<DowntimeEvent | null> {
-        const event = await db<DowntimeEvent>('downtime_events')
+        const event = await db<DowntimeEventsTable>('downtime_events')
             .where('is_active', true)
             .orderBy('started_at', 'desc')
             .first();
@@ -70,7 +81,7 @@ export class DowntimeService {
      * @returns Array of downtime events
      */
     async getAllDowntimeEvents(limit = 100): Promise<DowntimeEvent[]> {
-        return await db<DowntimeEvent>('downtime_events')
+        return await db<DowntimeEventsTable>('downtime_events')
             .orderBy('started_at', 'desc')
             .limit(limit);
     }
@@ -82,7 +93,7 @@ export class DowntimeService {
      * @returns Array of downtime events
      */
     async getDowntimeEventsInRange(startDate: Date, endDate: Date): Promise<DowntimeEvent[]> {
-        return await db<DowntimeEvent>('downtime_events')
+        return await db<DowntimeEventsTable>('downtime_events')
             .where((builder) => {
                 builder
                     .whereBetween('started_at', [startDate, endDate])

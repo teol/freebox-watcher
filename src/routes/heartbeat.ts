@@ -1,9 +1,9 @@
 import { type FastifyInstance, type FastifyPluginAsync, type RouteShorthandOptions } from 'fastify';
 import { authMiddleware } from '../middleware/auth.js';
-import heartbeatService, { type HeartbeatInsert } from '../services/heartbeat.js';
+import heartbeatService, { type HeartbeatInput } from '../services/heartbeat.js';
 import downtimeService from '../services/downtime.js';
 
-type HeartbeatRequestBody = HeartbeatInsert;
+type HeartbeatRequestBody = HeartbeatInput;
 
 type HeartbeatRouteOptions = RouteShorthandOptions;
 
