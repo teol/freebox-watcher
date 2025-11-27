@@ -1,12 +1,12 @@
 import 'dotenv/config';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { testConnection, closeConnection } from './db/config.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
 
 /**
  * Create Fastify instance with Pino logger
  */
-const fastify = Fastify({
+const fastify: FastifyInstance = Fastify({
     logger: {
         level: process.env.LOG_LEVEL || 'info',
         transport:
@@ -26,14 +26,14 @@ const fastify = Fastify({
 /**
  * Register routes
  */
-async function registerRoutes() {
+async function registerRoutes(): Promise<void> {
     await fastify.register(heartbeatRoutes);
 }
 
 /**
  * Start the server
  */
-async function start() {
+async function start(): Promise<void> {
     try {
         // Validate required environment variables
         if (!process.env.API_KEY) {
@@ -49,7 +49,7 @@ async function start() {
         await registerRoutes();
 
         // Start server
-        const port = parseInt(process.env.PORT, 10) || 3001;
+        const port = Number.parseInt(process.env.PORT ?? '3001', 10);
         const host = process.env.HOST || '0.0.0.0';
 
         await fastify.listen({ port, host });
@@ -64,7 +64,7 @@ async function start() {
 /**
  * Graceful shutdown
  */
-async function shutdown(signal) {
+async function shutdown(signal: string): Promise<void> {
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
     try {
@@ -73,7 +73,7 @@ async function shutdown(signal) {
         fastify.log.info('Server shut down successfully');
         process.exit(0);
     } catch (error) {
-        fastify.log.error('Error during shutdown:', error);
+        fastify.log.error({ error }, 'Error during shutdown');
         process.exit(1);
     }
 }
@@ -83,4 +83,4 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Start the application
-start();
+void start();

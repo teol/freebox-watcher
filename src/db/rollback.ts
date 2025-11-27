@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-async function rollbackLastMigration() {
+async function rollbackLastMigration(): Promise<void> {
     try {
         console.log('Rolling back last migration...');
 
@@ -45,4 +45,4 @@ async function rollbackLastMigration() {
     }
 }
 
-rollbackLastMigration();
+void rollbackLastMigration();

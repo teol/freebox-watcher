@@ -2,18 +2,21 @@
     "name": "freebox-watcher",
     "version": "1.0.0",
     "description": "A monitoring service for Freebox Delta that tracks uptime and alerts on downtime events",
-    "main": "src/index.js",
+    "main": "dist/index.js",
     "type": "module",
     "engines": {
         "node": ">=22.0.0"
     },
     "scripts": {
-        "start": "node src/index.js",
-        "dev": "node --watch src/index.js",
-        "test": "node --test test/**/*.test.js",
-        "test:coverage": "node --test --experimental-test-coverage test/**/*.test.js",
-        "migrate": "node src/db/migrate.js",
-        "migrate:rollback": "node src/db/rollback.js",
+        "clean": "rm -rf dist",
+        "build": "tsc -p tsconfig.json",
+        "start": "node --enable-source-maps dist/index.js",
+        "dev": "ts-node --esm src/index.ts",
+        "watch": "ts-node --esm --watch src/index.ts",
+        "test": "node --loader ts-node/esm --test test/**/*.test.ts",
+        "test:coverage": "node --loader ts-node/esm --test --experimental-test-coverage test/**/*.test.ts",
+        "migrate": "ts-node --esm src/db/migrate.ts",
+        "migrate:rollback": "ts-node --esm src/db/rollback.ts",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },
@@ -35,6 +38,9 @@
         "pino-pretty": "^13.0.0"
     },
     "devDependencies": {
-        "prettier": "^3.4.2"
+        "@types/node": "^22.9.0",
+        "prettier": "^3.4.2",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.6.3"
     }
 }
