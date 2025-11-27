@@ -11,7 +11,8 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 - 📡 HTTP heartbeat endpoint for receiving status updates
 - 🔒 Simple authentication mechanism to secure the API
 - 📊 MariaDB storage for heartbeat history
-- 🔔 Downtime detection and alerting
+- 🔔 Automatic downtime detection (5 minutes without heartbeat)
+- 📲 Telegram notifications for downtime alerts and recovery
 - 📝 Structured logging with Pino
 - ⚡ High-performance API built with Fastify
 
@@ -111,6 +112,12 @@ LOG_LEVEL=info
 
 # Monitoring
 HEARTBEAT_TIMEOUT=300000
+DOWNTIME_CHECK_INTERVAL=60000
+DOWNTIME_CONFIRMATION_DELAY=1800000
+
+# Telegram Notifications (optional)
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_CHAT_ID=your-telegram-chat-id
 ```
 
 ### Environment Variables
@@ -123,7 +130,11 @@ HEARTBEAT_TIMEOUT=300000
 - `DB_PASSWORD`: Database password
 - `DB_NAME`: Database name
 - `LOG_LEVEL`: Logging level (trace, debug, info, warn, error, fatal)
-- `HEARTBEAT_TIMEOUT`: Time in milliseconds before considering a missed heartbeat (default: 5 minutes)
+- `HEARTBEAT_TIMEOUT`: Time in milliseconds before considering a missed heartbeat (default: 300000 = 5 minutes)
+- `DOWNTIME_CHECK_INTERVAL`: Interval in milliseconds for checking downtime conditions (default: 60000 = 1 minute)
+- `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
+- `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
+- `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
 
 ## Database Schema
 
@@ -137,6 +148,41 @@ Run migrations to create the schema:
 ```bash
 yarn db:migrate
 ```
+
+## Telegram Notifications Setup
+
+Freebox Watcher can send downtime alerts via Telegram. This is optional but highly recommended for real-time monitoring.
+
+### Creating a Telegram Bot
+
+1. Open Telegram and search for [@BotFather](https://t.me/botfather)
+2. Send `/newbot` to BotFather
+3. Follow the prompts to choose a name and username for your bot
+4. BotFather will provide you with a bot token (e.g., `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+5. Copy this token and set it as `TELEGRAM_BOT_TOKEN` in your `.env` file
+
+### Getting Your Chat ID
+
+1. Start a conversation with your newly created bot by clicking the link provided by BotFather or searching for your bot's username
+2. Send any message to your bot (e.g., "Hello")
+3. Visit the following URL in your browser (replace `<YOUR_BOT_TOKEN>` with your actual bot token):
+    ```
+    https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+    ```
+4. Look for the `chat` object in the JSON response and copy the `id` value (e.g., `123456789`)
+5. Set this ID as `TELEGRAM_CHAT_ID` in your `.env` file
+
+### Notification Types
+
+The service sends three types of notifications:
+
+- **🔴 Downtime Detected**: Sent immediately when no heartbeat is received for the configured timeout (default: 5 minutes)
+- **⚠️ Downtime Confirmed**: Sent after the downtime has lasted for the configured confirmation delay (default: 30 minutes)
+- **✅ Service Recovered**: Sent when a heartbeat is received after a downtime event
+
+### Disabling Notifications
+
+Telegram notifications are optional. If you don't configure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, the service will log a warning at startup but will continue to function normally without sending notifications.
 
 ## Production Deployment
 
