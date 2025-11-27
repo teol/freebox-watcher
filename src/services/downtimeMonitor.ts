@@ -1,6 +1,7 @@
+import type { FastifyBaseLogger } from 'fastify';
 import heartbeatService from './heartbeat.js';
 import downtimeService from './downtime.js';
-import notificationService from './notification.js';
+import { NotificationService } from './notification.js';
 
 /**
  * DowntimeMonitor periodically checks for downtime conditions
@@ -11,8 +12,16 @@ export class DowntimeMonitor {
     private confirmedDowntimeIds = new Set<number>();
     private readonly checkIntervalMs: number;
     private readonly confirmationDelayMs = 30 * 60 * 1000; // 30 minutes
+    private logger: FastifyBaseLogger;
+    private notificationService: NotificationService;
 
-    constructor(checkIntervalMs = 60000) {
+    constructor(
+        logger: FastifyBaseLogger,
+        notificationService: NotificationService,
+        checkIntervalMs = 60000
+    ) {
+        this.logger = logger;
+        this.notificationService = notificationService;
         this.checkIntervalMs = checkIntervalMs;
     }
 
@@ -21,11 +30,14 @@ export class DowntimeMonitor {
      */
     start(): void {
         if (this.intervalId) {
-            console.warn('DowntimeMonitor is already running');
+            this.logger.warn('DowntimeMonitor is already running');
             return;
         }
 
-        console.log(`Starting downtime monitor (check interval: ${this.checkIntervalMs / 1000}s)`);
+        this.logger.info(
+            { checkIntervalSeconds: this.checkIntervalMs / 1000 },
+            'Starting downtime monitor'
+        );
 
         // Run immediately on start
         void this.checkDowntime();
@@ -43,7 +55,7 @@ export class DowntimeMonitor {
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
-            console.log('Downtime monitor stopped');
+            this.logger.info('Downtime monitor stopped');
         }
     }
 
@@ -65,7 +77,7 @@ export class DowntimeMonitor {
                 await this.checkConfirmationNotification(activeDowntime);
             }
         } catch (error) {
-            console.error('Error in downtime check:', error);
+            this.logger.error({ error }, 'Error in downtime check');
         }
     }
 
@@ -87,11 +99,14 @@ export class DowntimeMonitor {
             'Automatically detected downtime'
         );
 
-        console.log(`Created downtime event #${downtimeId} at ${downtimeStartedAt.toISOString()}`);
+        this.logger.info(
+            { downtimeId, startedAt: downtimeStartedAt.toISOString() },
+            'Created downtime event'
+        );
 
         // Send initial notification
-        if (notificationService.isEnabled()) {
-            await notificationService.sendDowntimeAlert({
+        if (this.notificationService.isEnabled()) {
+            await this.notificationService.sendDowntimeAlert({
                 downtimeId,
                 startedAt: downtimeStartedAt,
             });
@@ -112,12 +127,16 @@ export class DowntimeMonitor {
         if (timeSinceStart >= this.confirmationDelayMs) {
             this.confirmedDowntimeIds.add(downtime.id);
 
-            console.log(
-                `Sending confirmation notification for downtime #${downtime.id} (duration: ${Math.floor(timeSinceStart / 60000)}min)`
+            this.logger.info(
+                {
+                    downtimeId: downtime.id,
+                    durationMinutes: Math.floor(timeSinceStart / 60000),
+                },
+                'Sending confirmation notification for downtime'
             );
 
-            if (notificationService.isEnabled()) {
-                await notificationService.sendDowntimeConfirmedAlert({
+            if (this.notificationService.isEnabled()) {
+                await this.notificationService.sendDowntimeConfirmedAlert({
                     downtimeId: downtime.id,
                     startedAt: downtimeStartedAt,
                 });
@@ -132,5 +151,3 @@ export class DowntimeMonitor {
         this.confirmedDowntimeIds.delete(downtimeId);
     }
 }
-
-export default new DowntimeMonitor();
