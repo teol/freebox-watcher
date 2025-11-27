@@ -126,7 +126,7 @@ export class DowntimeMonitor {
             await this.notificationService.sendDowntimeAlert({
                 downtimeId,
                 startedAt: downtimeStartedAt,
-            });
+            }, this.heartbeatTimeoutMs);
         }
     }
 
@@ -155,7 +155,7 @@ export class DowntimeMonitor {
                 await this.notificationService.sendDowntimeConfirmedAlert({
                     downtimeId: downtime.id,
                     startedAt: downtime.started_at,
-                });
+                }, this.confirmationDelayMs);
             }
         }
     }
