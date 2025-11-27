@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-async function runMigrations() {
+async function runMigrations(): Promise<void> {
     try {
         console.log('Starting database migrations...');
 
@@ -23,11 +23,13 @@ async function runMigrations() {
         // Get all migration files
         const migrationsDir = join(__dirname, 'migrations');
         const files = await readdir(migrationsDir);
-        const migrationFiles = files.filter((f) => f.endsWith('.js')).sort();
+        const migrationFiles = files
+            .filter((fileName) => fileName.endsWith('.ts') || fileName.endsWith('.js'))
+            .sort();
 
         // Get already run migrations
         const completedMigrations = await db('knex_migrations').select('name');
-        const completedNames = completedMigrations.map((m) => m.name);
+        const completedNames = completedMigrations.map((migration) => migration.name);
 
         // Run pending migrations
         for (const file of migrationFiles) {
@@ -54,4 +56,4 @@ async function runMigrations() {
     }
 }
 
-runMigrations();
+void runMigrations();

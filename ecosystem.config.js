@@ -2,7 +2,7 @@ module.exports = {
     apps: [
         {
             name: 'freebox-watcher',
-            script: './src/index.js',
+            script: './dist/src/index.js',
             instances: 1,
             exec_mode: 'fork',
             autorestart: true,

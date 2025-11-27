@@ -1,31 +1,36 @@
-/**
- * Authentication middleware for Fastify
- * Validates API key from Authorization header
- */
-export function authMiddleware(request, reply, done) {
+import { type FastifyReply, type FastifyRequest, type HookHandlerDoneFunction } from 'fastify';
+
+export function authMiddleware(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    done: HookHandlerDoneFunction
+): void {
     const authHeader = request.headers.authorization;
 
     if (!authHeader) {
-        return reply.code(401).send({
+        void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Missing Authorization header',
         });
+        return;
     }
 
     const [type, token] = authHeader.split(' ');
 
     if (type !== 'Bearer') {
-        return reply.code(401).send({
+        void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Invalid Authorization header format. Expected: Bearer <token>',
         });
+        return;
     }
 
     if (token !== process.env.API_KEY) {
-        return reply.code(401).send({
+        void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Invalid API key',
         });
+        return;
     }
 
     done();
