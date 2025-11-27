@@ -98,7 +98,7 @@ export class NotificationService {
             `Duration: ${durationMinutes} minutes`,
             `ID: ${data.downtimeId}`,
             '',
-            'Service has been down for over 30 minutes.',
+            `Service has been down for over ${Number.parseInt(process.env.DOWNTIME_CONFIRMATION_DELAY ?? '1800000', 10) / 60000} minutes.`,
         ].join('\n');
 
         await this.sendMessage(message);
