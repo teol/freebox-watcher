@@ -2,6 +2,7 @@ import 'dotenv/config';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { testConnection, closeConnection } from './db/config.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
+import downtimeMonitor from './services/downtimeMonitor.js';
 
 /**
  * Create Fastify instance with Pino logger
@@ -55,6 +56,9 @@ async function start(): Promise<void> {
         await fastify.listen({ port, host });
 
         fastify.log.info(`Server listening on ${host}:${port}`);
+
+        // Start downtime monitoring
+        downtimeMonitor.start();
     } catch (error) {
         fastify.log.error(error);
         process.exit(1);
@@ -68,6 +72,9 @@ async function shutdown(signal: string): Promise<void> {
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
     try {
+        // Stop downtime monitoring
+        downtimeMonitor.stop();
+
         await fastify.close();
         await closeConnection();
         fastify.log.info('Server shut down successfully');
