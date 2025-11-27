@@ -79,7 +79,7 @@ export class NotificationService {
             `Started: ${data.startedAt.toISOString()}`,
             `ID: ${data.downtimeId}`,
             '',
-            'No heartbeat received for 5 minutes.',
+            `No heartbeat received for ${Number.parseInt(process.env.HEARTBEAT_TIMEOUT ?? '300000', 10) / 60000} minutes.`,
         ].join('\n');
 
         await this.sendMessage(message);
