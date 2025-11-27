@@ -1,4 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
+import type { FastifyBaseLogger } from 'fastify';
 
 export interface DowntimeNotificationData {
     downtimeId: number;
@@ -12,8 +13,10 @@ export class NotificationService {
     private bot: TelegramBot | null = null;
     private chatId: string | null = null;
     private enabled = false;
+    private logger: FastifyBaseLogger;
 
-    constructor() {
+    constructor(logger: FastifyBaseLogger) {
+        this.logger = logger;
         this.initialize();
     }
 
@@ -25,7 +28,7 @@ export class NotificationService {
         const chatId = process.env.TELEGRAM_CHAT_ID;
 
         if (!botToken || !chatId) {
-            console.warn(
+            this.logger.warn(
                 'Telegram notifications disabled: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured'
             );
             return;
@@ -35,8 +38,9 @@ export class NotificationService {
             this.bot = new TelegramBot(botToken, { polling: false });
             this.chatId = chatId;
             this.enabled = true;
+            this.logger.info('Telegram notifications enabled');
         } catch (error) {
-            console.error('Failed to initialize Telegram bot:', error);
+            this.logger.error({ error }, 'Failed to initialize Telegram bot');
         }
     }
 
@@ -59,8 +63,9 @@ export class NotificationService {
             await this.bot.sendMessage(this.chatId, message, {
                 parse_mode: 'Markdown',
             });
+            this.logger.debug({ chatId: this.chatId }, 'Telegram message sent');
         } catch (error) {
-            console.error('Failed to send Telegram message:', error);
+            this.logger.error({ error }, 'Failed to send Telegram message');
         }
     }
 
@@ -124,5 +129,3 @@ export class NotificationService {
         await this.sendMessage(message);
     }
 }
-
-export default new NotificationService();

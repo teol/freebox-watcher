@@ -3,6 +3,8 @@ import assert from 'node:assert';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { heartbeatRoutes } from '../src/routes/heartbeat.js';
 import { type HeartbeatInput } from '../src/services/heartbeat.js';
+import { NotificationService } from '../src/services/notification.js';
+import { DowntimeMonitor } from '../src/services/downtimeMonitor.js';
 
 interface HeartbeatResponseBody {
     success?: boolean;
@@ -19,6 +21,13 @@ describe('Heartbeat Routes', () => {
         process.env.API_KEY = testApiKey;
 
         fastify = Fastify({ logger: false });
+
+        // Initialize and decorate services (required by heartbeat routes)
+        const notificationService = new NotificationService(fastify.log);
+        const downtimeMonitor = new DowntimeMonitor(fastify.log, notificationService);
+        fastify.decorate('notificationService', notificationService);
+        fastify.decorate('downtimeMonitor', downtimeMonitor);
+
         await fastify.register(heartbeatRoutes);
         await fastify.ready();
     });

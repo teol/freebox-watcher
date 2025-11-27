@@ -2,8 +2,6 @@ import { type FastifyInstance, type FastifyPluginAsync, type RouteShorthandOptio
 import { authMiddleware } from '../middleware/auth.js';
 import heartbeatService, { type HeartbeatInput } from '../services/heartbeat.js';
 import downtimeService from '../services/downtime.js';
-import notificationService from '../services/notification.js';
-import downtimeMonitor from '../services/downtimeMonitor.js';
 
 type HeartbeatRequestBody = HeartbeatInput;
 
@@ -59,13 +57,13 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                 await downtimeService.endDowntimeEvent(activeDowntime.id, endedAt);
 
                 // Mark downtime as ended in the monitor
-                downtimeMonitor.markDowntimeEnded(activeDowntime.id);
+                fastify.downtimeMonitor.markDowntimeEnded(activeDowntime.id);
 
                 fastify.log.info({ downtimeId: activeDowntime.id }, 'Downtime event ended');
 
                 // Send recovery notification
-                if (notificationService.isEnabled()) {
-                    await notificationService.sendRecoveryAlert(
+                if (fastify.notificationService.isEnabled()) {
+                    await fastify.notificationService.sendRecoveryAlert(
                         activeDowntime.id,
                         new Date(activeDowntime.started_at),
                         endedAt
