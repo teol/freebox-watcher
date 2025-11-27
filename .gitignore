@@ -5,3 +5,4 @@ logs/*
 *.log
 .yarn/*.gz
 .DS_Store
+dist/
