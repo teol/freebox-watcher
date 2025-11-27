@@ -41,32 +41,38 @@ git clone https://github.com/teol/freebox-watcher.git
 cd freebox-watcher
 ```
 
-2. Install dependencies with Yarn:
+2. Enable Corepack to use the pinned Yarn 4 version:
 
 ```bash
-yarn install
+corepack enable
 ```
 
-3. Configure environment variables:
+3. Install dependencies with Yarn (immutable to respect the lockfile):
+
+```bash
+yarn install --immutable
+```
+
+4. Configure environment variables:
 
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
 ```
 
-4. Run database migrations:
+5. Run database migrations:
 
 ```bash
 yarn migrate
 ```
 
-5. Build the service:
+6. Build the service:
 
 ```bash
 yarn build
 ```
 
-6. Start the service:
+7. Start the service (runs the compiled output at `dist/src/index.js`):
 
 ```bash
 yarn start
