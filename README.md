@@ -176,8 +176,8 @@ Freebox Watcher can send downtime alerts via Telegram. This is optional but high
 
 The service sends three types of notifications:
 
-- **🔴 Downtime Detected**: Sent immediately when no heartbeat is received for 5 minutes
-- **⚠️ Downtime Confirmed**: Sent after the downtime has lasted for 30 minutes
+- **🔴 Downtime Detected**: Sent immediately when no heartbeat is received for the configured timeout (default: 5 minutes)
+- **⚠️ Downtime Confirmed**: Sent after the downtime has lasted for the configured confirmation delay (default: 30 minutes)
 - **✅ Service Recovered**: Sent when a heartbeat is received after a downtime event
 
 ### Disabling Notifications
