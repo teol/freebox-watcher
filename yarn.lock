@@ -173,7 +173,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node-telegram-bot-api@npm:^0":
+"@types/node-telegram-bot-api@npm:^0.64.13":
   version: 0.64.13
   resolution: "@types/node-telegram-bot-api@npm:0.64.13"
   dependencies:
@@ -996,7 +996,7 @@ __metadata:
   resolution: "freebox-watcher@workspace:."
   dependencies:
     "@types/node": "npm:^22.9.0"
-    "@types/node-telegram-bot-api": "npm:^0"
+    "@types/node-telegram-bot-api": "npm:^0.64.13"
     dotenv: "npm:^16.4.7"
     fastify: "npm:^5.2.0"
     knex: "npm:^3.1.0"
