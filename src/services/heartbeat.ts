@@ -1,18 +1,29 @@
 import { db } from '../db/config.js';
 
+export interface HeartbeatRecord {
+    id: number;
+    status: string;
+    timestamp: Date;
+    received_at?: Date;
+    metadata?: Record<string, unknown> | null;
+}
+
+export interface HeartbeatInsert {
+    status: string;
+    timestamp: string | Date;
+    metadata?: Record<string, unknown> | null;
+}
+
 /**
  * HeartbeatService handles storing and managing heartbeat data
  */
 export class HeartbeatService {
     /**
      * Record a new heartbeat
-     * @param {Object} heartbeatData - The heartbeat data
-     * @param {string} heartbeatData.status - Status of the heartbeat (e.g., 'online')
-     * @param {string} heartbeatData.timestamp - ISO timestamp of the heartbeat
-     * @param {Object} [heartbeatData.metadata] - Optional metadata
-     * @returns {Promise<number>} The ID of the inserted heartbeat
+     * @param heartbeatData The heartbeat data
+     * @returns The ID of the inserted heartbeat
      */
-    async recordHeartbeat(heartbeatData) {
+    async recordHeartbeat(heartbeatData: HeartbeatInsert): Promise<number> {
         const { status, timestamp, metadata = null } = heartbeatData;
 
         const [id] = await db('heartbeats').insert({
@@ -21,31 +32,33 @@ export class HeartbeatService {
             metadata: metadata ? JSON.stringify(metadata) : null,
         });
 
-        return id;
+        return id as number;
     }
 
     /**
      * Get the last heartbeat
-     * @returns {Promise<Object|null>} The last heartbeat or null if none exists
+     * @returns The last heartbeat or null if none exists
      */
-    async getLastHeartbeat() {
-        const heartbeat = await db('heartbeats').orderBy('timestamp', 'desc').first();
+    async getLastHeartbeat(): Promise<HeartbeatRecord | null> {
+        const heartbeat = await db<HeartbeatRecord>('heartbeats')
+            .orderBy('timestamp', 'desc')
+            .first();
 
-        return heartbeat || null;
+        return heartbeat ?? null;
     }
 
     /**
      * Check if a downtime event should be created based on the last heartbeat
-     * @returns {Promise<boolean>} True if downtime should be triggered
+     * @returns True if downtime should be triggered
      */
-    async shouldTriggerDowntime() {
+    async shouldTriggerDowntime(): Promise<boolean> {
         const lastHeartbeat = await this.getLastHeartbeat();
 
         if (!lastHeartbeat) {
             return false;
         }
 
-        const timeoutMs = parseInt(process.env.HEARTBEAT_TIMEOUT, 10) || 300000;
+        const timeoutMs = Number.parseInt(process.env.HEARTBEAT_TIMEOUT ?? '300000', 10);
         const lastHeartbeatTime = new Date(lastHeartbeat.timestamp);
         const timeSinceLastHeartbeat = Date.now() - lastHeartbeatTime.getTime();
 
@@ -54,22 +67,22 @@ export class HeartbeatService {
 
     /**
      * Get heartbeats within a time range
-     * @param {Date} startDate - Start date
-     * @param {Date} endDate - End date
-     * @returns {Promise<Array>} Array of heartbeats
+     * @param startDate Start date
+     * @param endDate End date
+     * @returns Array of heartbeats
      */
-    async getHeartbeatsInRange(startDate, endDate) {
-        return await db('heartbeats')
+    async getHeartbeatsInRange(startDate: Date, endDate: Date): Promise<HeartbeatRecord[]> {
+        return await db<HeartbeatRecord>('heartbeats')
             .whereBetween('timestamp', [startDate, endDate])
             .orderBy('timestamp', 'asc');
     }
 
     /**
      * Delete old heartbeats (cleanup)
-     * @param {number} daysToKeep - Number of days to keep
-     * @returns {Promise<number>} Number of deleted records
+     * @param daysToKeep Number of days to keep
+     * @returns Number of deleted records
      */
-    async cleanupOldHeartbeats(daysToKeep = 30) {
+    async cleanupOldHeartbeats(daysToKeep = 30): Promise<number> {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 

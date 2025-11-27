@@ -1,10 +1,10 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { authMiddleware } from '../src/middleware/auth.js';
 
 describe('Authentication Middleware', () => {
-    let fastify;
+    let fastify: FastifyInstance;
 
     before(async () => {
         // Set up test environment
@@ -13,7 +13,7 @@ describe('Authentication Middleware', () => {
         fastify = Fastify({ logger: false });
 
         // Register a test route with auth middleware
-        fastify.get('/test-protected', { preHandler: authMiddleware }, async (request, reply) => {
+        fastify.get('/test-protected', { preHandler: authMiddleware }, async () => {
             return { message: 'success' };
         });
 
@@ -31,7 +31,7 @@ describe('Authentication Middleware', () => {
         });
 
         assert.strictEqual(response.statusCode, 401);
-        const body = JSON.parse(response.body);
+        const body = JSON.parse(response.body) as { error: string; message: string };
         assert.strictEqual(body.error, 'Unauthorized');
         assert.strictEqual(body.message, 'Missing Authorization header');
     });
@@ -46,7 +46,7 @@ describe('Authentication Middleware', () => {
         });
 
         assert.strictEqual(response.statusCode, 401);
-        const body = JSON.parse(response.body);
+        const body = JSON.parse(response.body) as { error: string; message: string };
         assert.strictEqual(body.error, 'Unauthorized');
         assert.ok(body.message.includes('Invalid Authorization header format'));
     });
@@ -61,7 +61,7 @@ describe('Authentication Middleware', () => {
         });
 
         assert.strictEqual(response.statusCode, 401);
-        const body = JSON.parse(response.body);
+        const body = JSON.parse(response.body) as { error: string; message: string };
         assert.strictEqual(body.error, 'Unauthorized');
         assert.strictEqual(body.message, 'Invalid API key');
     });
@@ -76,7 +76,7 @@ describe('Authentication Middleware', () => {
         });
 
         assert.strictEqual(response.statusCode, 200);
-        const body = JSON.parse(response.body);
+        const body = JSON.parse(response.body) as { message: string };
         assert.strictEqual(body.message, 'success');
     });
 });

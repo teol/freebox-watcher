@@ -18,6 +18,7 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 ## Tech Stack
 
 - **Runtime**: Node.js 22
+- **Language**: TypeScript
 - **Web Framework**: Fastify
 - **Database**: MariaDB
 - **Query Builder**: Knex.js with mysql2 driver
@@ -29,7 +30,7 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 
 - Node.js 22 or higher
 - MariaDB 10.5 or higher
-- npm or yarn
+- Yarn 4 (included via this repository)
 
 ## Installation
 
@@ -40,30 +41,51 @@ git clone https://github.com/teol/freebox-watcher.git
 cd freebox-watcher
 ```
 
-2. Install dependencies:
+2. Enable Corepack to use the pinned Yarn 4 version:
 
 ```bash
-npm install
+corepack enable
 ```
 
-3. Configure environment variables:
+3. Install dependencies with Yarn (immutable to respect the lockfile):
+
+```bash
+yarn install --immutable
+```
+
+4. Configure environment variables:
 
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
 ```
 
-4. Run database migrations:
+5. Run database migrations:
 
 ```bash
-npm run migrate
+yarn migrate
 ```
 
-5. Start the service:
+6. Build the service:
 
 ```bash
-npm start
+yarn build
 ```
+
+7. Start the service (runs the compiled output at `dist/src/index.js`):
+
+```bash
+yarn start
+```
+
+## Useful Scripts
+
+- `yarn dev` - Run the API directly with ts-node
+- `yarn watch` - Run the API in watch mode with automatic reloads
+- `yarn build` - Compile the TypeScript sources to `dist`
+- `yarn test` - Execute the test suite with Node's test runner
+- `yarn migrate` / `yarn migrate:rollback` - Apply or roll back database migrations
+- `yarn format` - Format the codebase with Prettier
 
 ## Configuration
 
@@ -110,7 +132,7 @@ The service uses the following tables:
 Run migrations to create the schema:
 
 ```bash
-npm run migrate
+yarn migrate
 ```
 
 ## Production Deployment
@@ -148,9 +170,8 @@ server {
 ### Running with PM2
 
 ```bash
-npm install -g pm2
-pm2 start ecosystem.config.js
-pm2 save
+yarn dlx pm2@latest start ecosystem.config.js
+yarn dlx pm2@latest save
 ```
 
 ## License

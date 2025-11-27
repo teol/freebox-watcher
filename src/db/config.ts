@@ -1,14 +1,14 @@
 import 'dotenv/config';
-import knex from 'knex';
+import knex, { type Knex } from 'knex';
 
 /**
  * Database configuration for Knex.js
  */
-const config = {
+const config: Knex.Config = {
     client: 'mysql2',
     connection: {
         host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT, 10) || 3306,
+        port: Number.parseInt(process.env.DB_PORT ?? '3306', 10),
         user: process.env.DB_USER || 'freebox_watcher',
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME || 'freebox_watcher',
@@ -25,24 +25,25 @@ const config = {
 /**
  * Create and export database instance
  */
-export const db = knex(config);
+export const db: Knex = knex(config);
 
 /**
  * Test database connection
  */
-export async function testConnection() {
+export async function testConnection(): Promise<boolean> {
     try {
         await db.raw('SELECT 1');
         return true;
     } catch (error) {
-        throw new Error(`Database connection failed: ${error.message}`);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Database connection failed: ${message}`);
     }
 }
 
 /**
  * Close database connection
  */
-export async function closeConnection() {
+export async function closeConnection(): Promise<void> {
     await db.destroy();
 }
 

@@ -1,11 +1,17 @@
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { heartbeatRoutes } from '../src/routes/heartbeat.js';
-import { HeartbeatService } from '../src/services/heartbeat.js';
+import { type HeartbeatInsert } from '../src/services/heartbeat.js';
+
+interface HeartbeatResponseBody {
+    success?: boolean;
+    message: string;
+    id?: number;
+}
 
 describe('Heartbeat Routes', () => {
-    let fastify;
+    let fastify: FastifyInstance;
     const testApiKey = 'test-heartbeat-key-12345';
 
     before(async () => {
@@ -48,7 +54,7 @@ describe('Heartbeat Routes', () => {
         });
 
         assert.strictEqual(response.statusCode, 400);
-        const body = JSON.parse(response.body);
+        const body = JSON.parse(response.body) as HeartbeatResponseBody;
         assert.ok(body.message.includes('Invalid timestamp'));
     });
 
@@ -70,9 +76,7 @@ describe('Heartbeat Routes', () => {
 
 describe('HeartbeatService', () => {
     it('should validate heartbeat data structure', () => {
-        const service = new HeartbeatService();
-
-        const validData = {
+        const validData: HeartbeatInsert = {
             status: 'online',
             timestamp: new Date().toISOString(),
         };
@@ -82,15 +86,13 @@ describe('HeartbeatService', () => {
     });
 
     it('should handle metadata as optional field', () => {
-        const service = new HeartbeatService();
-
-        const dataWithMetadata = {
+        const dataWithMetadata: HeartbeatInsert = {
             status: 'online',
             timestamp: new Date().toISOString(),
             metadata: { version: '1.0.0' },
         };
 
-        const dataWithoutMetadata = {
+        const dataWithoutMetadata: HeartbeatInsert = {
             status: 'online',
             timestamp: new Date().toISOString(),
         };
