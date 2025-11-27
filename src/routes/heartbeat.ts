@@ -65,7 +65,7 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                 if (fastify.notificationService.isEnabled()) {
                     await fastify.notificationService.sendRecoveryAlert(
                         activeDowntime.id,
-                        new Date(activeDowntime.started_at),
+                        activeDowntime.started_at,
                         endedAt
                     );
                 }
