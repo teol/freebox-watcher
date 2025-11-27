@@ -98,6 +98,7 @@ Create a `.env` file in the project root with the following variables:
 ```env
 # Server Configuration
 PORT=3001
+HOST=127.0.0.1
 API_KEY=your-secure-api-key-here
 
 # Database Configuration
@@ -123,6 +124,7 @@ TELEGRAM_CHAT_ID=your-telegram-chat-id
 ### Environment Variables
 
 - `PORT`: Port number for the API server (default: 3001)
+- `HOST`: Network interface for the API server (default: 127.0.0.1 for local-only access)
 - `API_KEY`: Authentication key for securing the heartbeat endpoint
 - `DB_HOST`: MariaDB host address
 - `DB_PORT`: MariaDB port (default: 3306)
