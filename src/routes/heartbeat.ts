@@ -53,8 +53,22 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
             // Check if we need to end any active downtime
             const activeDowntime = await downtimeService.getActiveDowntimeEvent();
             if (activeDowntime && status === 'online') {
-                await downtimeService.endDowntimeEvent(activeDowntime.id, new Date());
+                const endedAt = new Date();
+                await downtimeService.endDowntimeEvent(activeDowntime.id, endedAt);
+
+                // Mark downtime as ended in the monitor
+                fastify.downtimeMonitor.markDowntimeEnded(activeDowntime.id);
+
                 fastify.log.info({ downtimeId: activeDowntime.id }, 'Downtime event ended');
+
+                // Send recovery notification
+                if (fastify.notificationService.isEnabled()) {
+                    await fastify.notificationService.sendRecoveryAlert(
+                        activeDowntime.id,
+                        activeDowntime.started_at,
+                        endedAt
+                    );
+                }
             }
 
             fastify.log.info({ heartbeatId: id, status }, 'Heartbeat recorded');
