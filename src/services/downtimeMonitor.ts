@@ -53,9 +53,6 @@ export class DowntimeMonitor {
             'Starting downtime monitor'
         );
 
-        // Run immediately on start
-        void this.checkDowntime();
-
         // Then run periodically
         const runCheck = async () => {
             await this.checkDowntime();
