@@ -27,6 +27,16 @@ export class DowntimeMonitor {
             10
         );
         this.heartbeatTimeoutMs = Number.parseInt(process.env.HEARTBEAT_TIMEOUT ?? '300000', 10);
+
+        if (
+            Number.isNaN(this.checkIntervalMs) ||
+            Number.isNaN(this.confirmationDelayMs) ||
+            Number.isNaN(this.heartbeatTimeoutMs)
+        ) {
+            throw new Error(
+                'Invalid monitoring configuration: One or more environment variables are not valid numbers.'
+            );
+        }
     }
 
     /**
@@ -47,9 +57,14 @@ export class DowntimeMonitor {
         void this.checkDowntime();
 
         // Then run periodically
-        this.intervalId = setInterval(() => {
-            void this.checkDowntime();
-        }, this.checkIntervalMs);
+        const runCheck = async () => {
+            await this.checkDowntime();
+            // If monitor has not been stopped, schedule the next check.
+            if (this.intervalId) {
+                this.intervalId = setTimeout(runCheck, this.checkIntervalMs);
+            }
+        };
+        this.intervalId = setTimeout(runCheck, 0);
     }
 
     /**
@@ -68,17 +83,23 @@ export class DowntimeMonitor {
      */
     private async checkDowntime(): Promise<void> {
         try {
-            const shouldTrigger = await heartbeatService.shouldTriggerDowntime();
             const activeDowntime = await downtimeService.getActiveDowntimeEvent();
 
-            // Case 1: No active downtime but should trigger
-            if (shouldTrigger && !activeDowntime) {
-                await this.createNewDowntime();
+            if (activeDowntime) {
+                // If there's an active downtime, we only need to check for confirmation
+                if (!this.confirmedDowntimeIds.has(activeDowntime.id)) {
+                    await this.checkConfirmationNotification(activeDowntime);
+                }
+                return;
             }
 
-            // Case 2: Active downtime that needs confirmation notification
-            if (activeDowntime && !this.confirmedDowntimeIds.has(activeDowntime.id)) {
-                await this.checkConfirmationNotification(activeDowntime);
+            // If no active downtime, check if we should create one
+            const lastHeartbeat = await heartbeatService.getLastHeartbeat();
+            if (lastHeartbeat) {
+                const timeSinceLast = Date.now() - lastHeartbeat.timestamp.getTime();
+                if (timeSinceLast > this.heartbeatTimeoutMs) {
+                    await this.createNewDowntime(lastHeartbeat);
+                }
             }
         } catch (error) {
             this.logger.error({ error }, 'Error in downtime check');
@@ -88,13 +109,7 @@ export class DowntimeMonitor {
     /**
      * Create a new downtime event and send initial notification
      */
-    private async createNewDowntime(): Promise<void> {
-        const lastHeartbeat = await heartbeatService.getLastHeartbeat();
-
-        if (!lastHeartbeat) {
-            return;
-        }
-
+    private async createNewDowntime(lastHeartbeat: { timestamp: Date }): Promise<void> {
         const downtimeStartedAt = new Date(
             lastHeartbeat.timestamp.getTime() + this.heartbeatTimeoutMs
         );
