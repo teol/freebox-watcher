@@ -112,6 +112,8 @@ LOG_LEVEL=info
 
 # Monitoring
 HEARTBEAT_TIMEOUT=300000
+DOWNTIME_CHECK_INTERVAL=60000
+DOWNTIME_CONFIRMATION_DELAY=1800000
 
 # Telegram Notifications (optional)
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
@@ -128,7 +130,9 @@ TELEGRAM_CHAT_ID=your-telegram-chat-id
 - `DB_PASSWORD`: Database password
 - `DB_NAME`: Database name
 - `LOG_LEVEL`: Logging level (trace, debug, info, warn, error, fatal)
-- `HEARTBEAT_TIMEOUT`: Time in milliseconds before considering a missed heartbeat (default: 5 minutes)
+- `HEARTBEAT_TIMEOUT`: Time in milliseconds before considering a missed heartbeat (default: 300000 = 5 minutes)
+- `DOWNTIME_CHECK_INTERVAL`: Interval in milliseconds for checking downtime conditions (default: 60000 = 1 minute)
+- `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
 

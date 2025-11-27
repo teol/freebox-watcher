@@ -11,18 +11,22 @@ export class DowntimeMonitor {
     private intervalId: NodeJS.Timeout | null = null;
     private confirmedDowntimeIds = new Set<number>();
     private readonly checkIntervalMs: number;
-    private readonly confirmationDelayMs = 30 * 60 * 1000; // 30 minutes
+    private readonly confirmationDelayMs: number;
+    private readonly heartbeatTimeoutMs: number;
     private logger: FastifyBaseLogger;
     private notificationService: NotificationService;
 
-    constructor(
-        logger: FastifyBaseLogger,
-        notificationService: NotificationService,
-        checkIntervalMs = 60000
-    ) {
+    constructor(logger: FastifyBaseLogger, notificationService: NotificationService) {
         this.logger = logger;
         this.notificationService = notificationService;
-        this.checkIntervalMs = checkIntervalMs;
+
+        // Parse configuration from environment variables
+        this.checkIntervalMs = Number.parseInt(process.env.DOWNTIME_CHECK_INTERVAL ?? '60000', 10);
+        this.confirmationDelayMs = Number.parseInt(
+            process.env.DOWNTIME_CONFIRMATION_DELAY ?? '1800000',
+            10
+        );
+        this.heartbeatTimeoutMs = Number.parseInt(process.env.HEARTBEAT_TIMEOUT ?? '300000', 10);
     }
 
     /**
@@ -91,8 +95,9 @@ export class DowntimeMonitor {
             return;
         }
 
-        const timeoutMs = Number.parseInt(process.env.HEARTBEAT_TIMEOUT ?? '300000', 10);
-        const downtimeStartedAt = new Date(new Date(lastHeartbeat.timestamp).getTime() + timeoutMs);
+        const downtimeStartedAt = new Date(
+            lastHeartbeat.timestamp.getTime() + this.heartbeatTimeoutMs
+        );
 
         const downtimeId = await downtimeService.createDowntimeEvent(
             downtimeStartedAt,
@@ -120,8 +125,7 @@ export class DowntimeMonitor {
         id: number;
         started_at: Date;
     }): Promise<void> {
-        const downtimeStartedAt = new Date(downtime.started_at);
-        const timeSinceStart = Date.now() - downtimeStartedAt.getTime();
+        const timeSinceStart = Date.now() - downtime.started_at.getTime();
 
         // If downtime has been active for more than 30 minutes, send confirmation
         if (timeSinceStart >= this.confirmationDelayMs) {
@@ -138,7 +142,7 @@ export class DowntimeMonitor {
             if (this.notificationService.isEnabled()) {
                 await this.notificationService.sendDowntimeConfirmedAlert({
                     downtimeId: downtime.id,
-                    startedAt: downtimeStartedAt,
+                    startedAt: downtime.started_at,
                 });
             }
         }
