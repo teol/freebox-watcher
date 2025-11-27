@@ -145,15 +145,19 @@ describe('DowntimeMonitor', () => {
         const notificationCalls: Array<{ data: unknown; heartbeatTimeoutMs: number }> = [];
 
         downtimeService.getActiveDowntimeEvent = async () => null;
-        heartbeatService.getLastHeartbeat = async () => ({
-            timestamp: new Date(Date.now() - ((monitor as any).heartbeatTimeoutMs + 60000)),
-        }) as any;
+        heartbeatService.getLastHeartbeat = async () =>
+            ({
+                timestamp: new Date(Date.now() - ((monitor as any).heartbeatTimeoutMs + 60000)),
+            }) as any;
         downtimeService.createDowntimeEvent = async (startedAt: Date, notes: string | null) => {
             createdDowntimeArgs = { startedAt, notes };
             return 99;
         };
         notificationService.isEnabled = () => true;
-        notificationService.sendDowntimeAlert = async (data: unknown, heartbeatTimeoutMs: number) => {
+        notificationService.sendDowntimeAlert = async (
+            data: unknown,
+            heartbeatTimeoutMs: number
+        ) => {
             notificationCalls.push({ data, heartbeatTimeoutMs });
         };
 
@@ -186,10 +190,11 @@ describe('DowntimeMonitor', () => {
         const startedAt = new Date(Date.now() - ((monitor as any).confirmationDelayMs + 120000));
         const notificationCalls: Array<{ data: unknown; confirmationDelayMs: number }> = [];
 
-        downtimeService.getActiveDowntimeEvent = async () => ({
-            id: 77,
-            started_at: startedAt,
-        }) as any;
+        downtimeService.getActiveDowntimeEvent = async () =>
+            ({
+                id: 77,
+                started_at: startedAt,
+            }) as any;
         notificationService.isEnabled = () => true;
         notificationService.sendDowntimeConfirmedAlert = async (
             data: unknown,
