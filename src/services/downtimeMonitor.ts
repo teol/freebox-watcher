@@ -17,7 +17,7 @@ export class DowntimeMonitor {
     private notificationService: NotificationService;
 
     constructor(logger: FastifyBaseLogger, notificationService: NotificationService) {
-        this.logger = logger;
+        this.logger = logger.child({ service: 'DowntimeMonitor' });
         this.notificationService = notificationService;
 
         // Parse configuration from environment variables
