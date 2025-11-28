@@ -4,14 +4,20 @@ import { mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Ensure logs directory exists
+ * Ensure logs directory exists.
+ * Returns the directory path on success, or null if creation fails.
  */
-function ensureLogsDirectory(): string {
-    const logsDir = join(process.cwd(), 'logs');
-    if (!existsSync(logsDir)) {
-        mkdirSync(logsDir, { recursive: true });
+function ensureLogsDirectory(): string | null {
+    try {
+        const logsDir = join(process.cwd(), 'logs');
+        if (!existsSync(logsDir)) {
+            mkdirSync(logsDir, { recursive: true });
+        }
+        return logsDir;
+    } catch (error) {
+        console.error('Failed to create logs directory:', error);
+        return null;
     }
-    return logsDir;
 }
 
 /**
@@ -30,14 +36,16 @@ function getLogLevel(): pino.Level {
  *
  * Development: Pretty-printed console output
  * Production: JSON logs to both console (stdout) and rotating file
+ *             Falls back to console-only if file logging cannot be initialized
  */
 function createApplicationLogger(): pino.Logger {
     const isDevelopment = process.env.NODE_ENV !== 'production';
+    const logLevel = getLogLevel();
 
     if (isDevelopment) {
         // Development: console with pino-pretty for better readability
         return pino({
-            level: getLogLevel(),
+            level: logLevel,
             transport: {
                 target: 'pino-pretty',
                 options: {
@@ -51,9 +59,25 @@ function createApplicationLogger(): pino.Logger {
         });
     }
 
-    // Production: multistream to both console and rotating file
+    // Production: attempt to set up file rotation
     const logsDir = ensureLogsDirectory();
 
+    const baseConfig = {
+        level: logLevel,
+        formatters: {
+            level: (label: string) => {
+                return { level: label };
+            },
+        },
+    };
+
+    if (logsDir === null) {
+        // Failed to create logs directory, fall back to console-only logging
+        console.warn('File logging disabled due to logs directory creation failure');
+        return pino(baseConfig, process.stdout);
+    }
+
+    // Set up rotating file stream
     const fileStream = createStream('app.log', {
         interval: '1d', // Rotate daily
         maxFiles: 30, // Keep 30 days of logs
@@ -61,17 +85,7 @@ function createApplicationLogger(): pino.Logger {
         compress: 'gzip', // Compress rotated logs
     });
 
-    return pino(
-        {
-            level: getLogLevel(),
-            formatters: {
-                level: (label) => {
-                    return { level: label };
-                },
-            },
-        },
-        pino.multistream([{ stream: process.stdout }, { stream: fileStream }])
-    );
+    return pino(baseConfig, pino.multistream([{ stream: process.stdout }, { stream: fileStream }]));
 }
 
 /**
