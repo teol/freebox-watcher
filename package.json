@@ -39,7 +39,8 @@
         "mysql2": "^3.11.5",
         "node-telegram-bot-api": "^0.66.0",
         "pino": "^9.5.0",
-        "pino-pretty": "^13.0.0"
+        "pino-pretty": "^13.0.0",
+        "rotating-file-stream": "^3.2.7"
     },
     "devDependencies": {
         "@types/node": "^22.9.0",
