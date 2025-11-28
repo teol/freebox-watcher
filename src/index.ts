@@ -4,13 +4,13 @@ import { testConnection, closeConnection } from './db/config.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
 import { NotificationService } from './services/notification.js';
 import { DowntimeMonitor } from './services/downtimeMonitor.js';
-import { createLoggerOptions } from './utils/logger.js';
+import { logger } from './utils/logger.js';
 
 /**
- * Create Fastify instance with Pino logger
+ * Create Fastify instance with shared logger
  */
 const fastify: FastifyInstance = Fastify({
-    logger: createLoggerOptions(),
+    logger: logger,
 });
 
 /**

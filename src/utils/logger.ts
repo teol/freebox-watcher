@@ -1,5 +1,4 @@
 import pino from 'pino';
-import type { LoggerOptions, TransportTargetOptions } from 'pino';
 import { createStream } from 'rotating-file-stream';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,25 +24,20 @@ function getLogLevel(): pino.Level {
 }
 
 /**
- * Create Pino logger configuration with pretty printing for development
- * and file rotation for production
+ * Create and configure the application logger instance.
+ * This single instance is used throughout the application (Fastify, services, etc.)
+ * to ensure consistent logging behavior.
+ *
+ * Development: Pretty-printed console output
+ * Production: JSON logs to both console (stdout) and rotating file
  */
-export function createLoggerOptions(): LoggerOptions {
+function createApplicationLogger(): pino.Logger {
     const isDevelopment = process.env.NODE_ENV !== 'production';
 
-    const baseOptions: LoggerOptions = {
-        level: getLogLevel(),
-        formatters: {
-            level: (label) => {
-                return { level: label };
-            },
-        },
-    };
-
     if (isDevelopment) {
-        // Development: pretty console output only
-        return {
-            ...baseOptions,
+        // Development: console with pino-pretty for better readability
+        return pino({
+            level: getLogLevel(),
             transport: {
                 target: 'pino-pretty',
                 options: {
@@ -54,52 +48,18 @@ export function createLoggerOptions(): LoggerOptions {
                         'fatal:bgRed,error:red,warn:yellow,info:green,debug:blue,trace:gray',
                 },
             },
-        };
+        });
     }
 
-    // Production: file logging with rotation + console output
-    const targets: TransportTargetOptions[] = [
-        {
-            target: 'pino/file',
-            level: getLogLevel(),
-            options: {
-                destination: 1, // stdout for container logs
-            },
-        },
-    ];
-
-    return {
-        ...baseOptions,
-        transport: {
-            targets,
-        },
-    };
-}
-
-/**
- * Create a root logger instance with optional file rotation stream
- */
-export function createLogger(): pino.Logger {
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-
-    if (isDevelopment) {
-        // Development: use simple configuration
-        return pino(createLoggerOptions());
-    }
-
-    // Production: add file rotation stream
+    // Production: multistream to both console and rotating file
     const logsDir = ensureLogsDirectory();
 
-    // Create rotating file stream
     const fileStream = createStream('app.log', {
         interval: '1d', // Rotate daily
         maxFiles: 30, // Keep 30 days of logs
         path: logsDir,
         compress: 'gzip', // Compress rotated logs
     });
-
-    // Create multistream: console + rotating file
-    const streams = [{ stream: process.stdout }, { stream: fileStream }];
 
     return pino(
         {
@@ -110,24 +70,17 @@ export function createLogger(): pino.Logger {
                 },
             },
         },
-        pino.multistream(streams)
+        pino.multistream([{ stream: process.stdout }, { stream: fileStream }])
     );
 }
 
 /**
- * Create a child logger with specific context
- * @param parent Parent logger instance
- * @param context Context object to bind to the child logger
- * @returns Child logger with bound context
+ * Shared logger instance used throughout the application.
+ * Import this instance in your code to ensure consistent logging.
  */
-export function createChildLogger(
-    parent: pino.Logger,
-    context: Record<string, unknown>
-): pino.Logger {
-    return parent.child(context);
-}
+export const logger = createApplicationLogger();
 
 /**
- * Default logger instance for use outside of Fastify
+ * Default export for convenience
  */
-export const logger = createLogger();
+export default logger;
