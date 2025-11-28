@@ -16,7 +16,7 @@ export class NotificationService {
     private logger: FastifyBaseLogger;
 
     constructor(logger: FastifyBaseLogger) {
-        this.logger = logger;
+        this.logger = logger.child({ service: 'NotificationService' });
         this.initialize();
     }
 
