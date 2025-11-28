@@ -1005,6 +1005,7 @@ __metadata:
     pino: "npm:^9.5.0"
     pino-pretty: "npm:^13.0.0"
     prettier: "npm:^3.4.2"
+    rotating-file-stream: "npm:^3.2.7"
     ts-node: "npm:^10.9.2"
     typescript: "npm:^5.6.3"
   languageName: unknown
@@ -2117,6 +2118,13 @@ __metadata:
   version: 1.4.1
   resolution: "rfdc@npm:1.4.1"
   checksum: 10c0/4614e4292356cafade0b6031527eea9bc90f2372a22c012313be1dcc69a3b90c7338158b414539be863fa95bfcb2ddcd0587be696841af4e6679d85e62c060c7
+  languageName: node
+  linkType: hard
+
+"rotating-file-stream@npm:^3.2.7":
+  version: 3.2.7
+  resolution: "rotating-file-stream@npm:3.2.7"
+  checksum: 10c0/1d1667c878fb216a82462a129ccae64cd0a09f3e4c42c4385ea72692b654d2929ded971397d2f783b876308a2d4b83d68f5c891e7ff912c20bba839aaeefa9c1
   languageName: node
   linkType: hard
 
