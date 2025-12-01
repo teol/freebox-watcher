@@ -220,10 +220,47 @@ server {
 
 ### Running with PM2
 
+For production deployments, PM2 is recommended for process management and automatic restarts.
+
+#### Start the service
+
 ```bash
 yarn dlx pm2@latest start ecosystem.config.js
+```
+
+#### Save the PM2 process list (auto-restart on reboot)
+
+```bash
 yarn dlx pm2@latest save
 ```
+
+#### Other useful PM2 commands
+
+```bash
+# View process status
+yarn dlx pm2@latest status
+
+# View logs
+yarn dlx pm2@latest logs freebox-watcher
+
+# Restart the service
+yarn dlx pm2@latest restart freebox-watcher
+
+# Stop the service
+yarn dlx pm2@latest stop freebox-watcher
+
+# Monitor CPU and memory usage
+yarn dlx pm2@latest monit
+```
+
+#### PM2 Configuration
+
+The `ecosystem.config.js` file includes:
+- Automatic restarts on crashes
+- Source maps support for better error traces
+- Memory limit (500MB) with automatic restart
+- Crash loop protection (max 10 restarts)
+- Structured logging with timestamps
 
 ## License
 
