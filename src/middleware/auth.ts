@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { type FastifyReply, type FastifyRequest, type HookHandlerDoneFunction } from 'fastify';
 
 export function authMiddleware(
@@ -20,7 +21,12 @@ export function authMiddleware(
     const bodyToken = (request.body as { token?: string })?.token;
 
     if (bodyToken) {
-        if (bodyToken !== apiKey) {
+        const tokenBuffer = Buffer.from(bodyToken);
+        const apiKeyBuffer = Buffer.from(apiKey);
+        if (
+            tokenBuffer.length !== apiKeyBuffer.length ||
+            !timingSafeEqual(tokenBuffer, apiKeyBuffer)
+        ) {
             void reply.code(401).send({
                 error: 'Unauthorized',
                 message: 'Invalid API key',
@@ -52,7 +58,9 @@ export function authMiddleware(
         return;
     }
 
-    if (token !== apiKey) {
+    const tokenBuffer = Buffer.from(token);
+    const apiKeyBuffer = Buffer.from(apiKey);
+    if (tokenBuffer.length !== apiKeyBuffer.length || !timingSafeEqual(tokenBuffer, apiKeyBuffer)) {
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Invalid API key',
