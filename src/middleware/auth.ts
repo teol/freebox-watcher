@@ -1,6 +1,25 @@
 import { timingSafeEqual } from 'node:crypto';
 import { type FastifyReply, type FastifyRequest, type HookHandlerDoneFunction } from 'fastify';
 
+/**
+ * Validates a token against the API key using constant-time comparison
+ * to prevent timing attacks
+ * @param token The token to validate
+ * @param apiKey The expected API key
+ * @returns true if the token is valid, false otherwise
+ */
+function isValidToken(token: string, apiKey: string): boolean {
+    const tokenBuffer = Buffer.from(token);
+    const apiKeyBuffer = Buffer.from(apiKey);
+
+    // Check lengths match before calling timingSafeEqual (required by the API)
+    if (tokenBuffer.length !== apiKeyBuffer.length) {
+        return false;
+    }
+
+    return timingSafeEqual(tokenBuffer, apiKeyBuffer);
+}
+
 export function authMiddleware(
     request: FastifyRequest,
     reply: FastifyReply,
@@ -21,12 +40,7 @@ export function authMiddleware(
     const bodyToken = (request.body as { token?: string })?.token;
 
     if (bodyToken) {
-        const tokenBuffer = Buffer.from(bodyToken);
-        const apiKeyBuffer = Buffer.from(apiKey);
-        if (
-            tokenBuffer.length !== apiKeyBuffer.length ||
-            !timingSafeEqual(tokenBuffer, apiKeyBuffer)
-        ) {
+        if (!isValidToken(bodyToken, apiKey)) {
             void reply.code(401).send({
                 error: 'Unauthorized',
                 message: 'Invalid API key',
@@ -58,9 +72,7 @@ export function authMiddleware(
         return;
     }
 
-    const tokenBuffer = Buffer.from(token);
-    const apiKeyBuffer = Buffer.from(apiKey);
-    if (tokenBuffer.length !== apiKeyBuffer.length || !timingSafeEqual(tokenBuffer, apiKeyBuffer)) {
+    if (!isValidToken(token, apiKey)) {
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Invalid API key',
