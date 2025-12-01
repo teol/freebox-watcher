@@ -5,12 +5,28 @@ export function authMiddleware(
     reply: FastifyReply,
     done: HookHandlerDoneFunction
 ): void {
+    // Check for token in request body first (for compatibility with new payload format)
+    const bodyToken = (request.body as { token?: string })?.token;
+
+    if (bodyToken) {
+        if (bodyToken !== process.env.API_KEY) {
+            void reply.code(401).send({
+                error: 'Unauthorized',
+                message: 'Invalid API key',
+            });
+            return;
+        }
+        done();
+        return;
+    }
+
+    // Fallback to Authorization header for backward compatibility
     const authHeader = request.headers.authorization;
 
     if (!authHeader) {
         void reply.code(401).send({
             error: 'Unauthorized',
-            message: 'Missing Authorization header',
+            message: 'Missing Authorization header or token in body',
         });
         return;
     }
