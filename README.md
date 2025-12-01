@@ -256,11 +256,40 @@ yarn dlx pm2@latest monit
 #### PM2 Configuration
 
 The `ecosystem.config.js` file includes:
+
 - Automatic restarts on crashes
 - Source maps support for better error traces
 - Memory limit (500MB) with automatic restart
 - Crash loop protection (max 10 restarts)
 - Structured logging with timestamps
+
+#### Log Rotation
+
+For long-running production deployments, it's recommended to set up log rotation to prevent PM2 log files from growing indefinitely.
+
+Install the PM2 log rotation module:
+
+```bash
+yarn dlx pm2@latest install pm2-logrotate
+```
+
+Configure log rotation (optional, defaults are reasonable):
+
+```bash
+# Set max file size before rotation (default: 10MB)
+yarn dlx pm2@latest set pm2-logrotate:max_size 10M
+
+# Set number of rotated files to keep (default: 10)
+yarn dlx pm2@latest set pm2-logrotate:retain 30
+
+# Enable compression of rotated logs (default: false)
+yarn dlx pm2@latest set pm2-logrotate:compress true
+
+# Set rotation interval (default: none, size-based only)
+yarn dlx pm2@latest set pm2-logrotate:rotateInterval '0 0 * * *'
+```
+
+Note: The application also maintains its own log files via Pino and rotating-file-stream, which handles rotation independently from PM2 logs.
 
 ## License
 
