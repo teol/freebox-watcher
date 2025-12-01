@@ -41,7 +41,7 @@ describe('Heartbeat Routes', () => {
             method: 'POST',
             url: '/heartbeat',
             payload: {
-                status: 'online',
+                connection_state: 'up',
                 timestamp: new Date().toISOString(),
             },
         });
@@ -57,7 +57,7 @@ describe('Heartbeat Routes', () => {
                 authorization: `Bearer ${testApiKey}`,
             },
             payload: {
-                status: 'online',
+                connection_state: 'up',
                 timestamp: 'invalid-timestamp',
             },
         });
@@ -75,38 +75,73 @@ describe('Heartbeat Routes', () => {
                 authorization: `Bearer ${testApiKey}`,
             },
             payload: {
-                status: 'online',
+                connection_state: 'up',
             },
         });
 
         assert.strictEqual(response.statusCode, 400);
+    });
+
+    it.skip('should accept heartbeat with new payload format and token in body (requires DB)', async () => {
+        const response = await fastify.inject({
+            method: 'POST',
+            url: '/heartbeat',
+            payload: {
+                token: testApiKey,
+                connection_state: 'up',
+                timestamp: new Date().toISOString(),
+                ipv4: '192.168.1.1',
+                ipv6: '2001:db8::1',
+                media_state: 'ftth',
+                connection_type: 'ethernet',
+                bandwidth_down: 1000000000,
+                bandwidth_up: 500000000,
+                rate_down: 9500,
+                rate_up: 4800,
+                bytes_down: 12345678,
+                bytes_up: 8765432,
+            },
+        });
+
+        if (response.statusCode !== 200) {
+            console.error('Error response:', response.body);
+        }
+
+        assert.strictEqual(response.statusCode, 200);
+        const body = JSON.parse(response.body) as HeartbeatResponseBody;
+        assert.strictEqual(body.success, true);
+        assert.ok(body.id);
     });
 });
 
 describe('HeartbeatService', () => {
     it('should validate heartbeat data structure', () => {
         const validData: HeartbeatInput = {
-            status: 'online',
+            connection_state: 'up',
             timestamp: new Date().toISOString(),
         };
 
-        assert.ok(validData.status);
+        assert.ok(validData.connection_state);
         assert.ok(validData.timestamp);
     });
 
-    it('should handle metadata as optional field', () => {
-        const dataWithMetadata: HeartbeatInput = {
-            status: 'online',
+    it('should handle additional fields (ipv4, bandwidth, etc)', () => {
+        const dataWithAdditionalFields: HeartbeatInput = {
+            connection_state: 'up',
             timestamp: new Date().toISOString(),
-            metadata: { version: '1.0.0' },
+            ipv4: '192.168.1.1',
+            ipv6: '2001:db8::1',
+            bandwidth_down: 1000000000,
+            bandwidth_up: 500000000,
         };
 
-        const dataWithoutMetadata: HeartbeatInput = {
-            status: 'online',
+        const dataWithoutAdditionalFields: HeartbeatInput = {
+            connection_state: 'up',
             timestamp: new Date().toISOString(),
         };
 
-        assert.ok(dataWithMetadata.metadata);
-        assert.strictEqual(dataWithoutMetadata.metadata, undefined);
+        assert.ok(dataWithAdditionalFields.ipv4);
+        assert.ok(dataWithAdditionalFields.bandwidth_down);
+        assert.strictEqual(dataWithoutAdditionalFields.ipv4, undefined);
     });
 });

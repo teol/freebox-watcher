@@ -20,19 +20,30 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
         schema: {
             body: {
                 type: 'object',
-                required: ['status', 'timestamp'],
+                required: ['connection_state', 'timestamp'],
                 properties: {
-                    status: { type: 'string' },
+                    connection_state: { type: 'string' },
                     timestamp: { type: 'string' },
-                    metadata: { type: 'object' },
+                    token: { type: 'string' },
+                    ipv4: { type: 'string' },
+                    ipv6: { type: 'string' },
+                    media_state: { type: 'string' },
+                    connection_type: { type: 'string' },
+                    bandwidth_down: { type: 'number' },
+                    bandwidth_up: { type: 'number' },
+                    rate_down: { type: 'number' },
+                    rate_up: { type: 'number' },
+                    bytes_down: { type: 'number' },
+                    bytes_up: { type: 'number' },
                 },
+                additionalProperties: true,
             },
         },
     };
 
     fastify.post<{ Body: HeartbeatRequestBody }>('/heartbeat', schema, async (request, reply) => {
         try {
-            const { status, timestamp, metadata } = request.body;
+            const { timestamp, ...heartbeatData } = request.body;
 
             // Validate timestamp
             const timestampDate = new Date(timestamp);
@@ -43,16 +54,17 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                 });
             }
 
-            // Record the heartbeat
+            // Record the heartbeat (passes entire body to service)
             const id = await heartbeatService.recordHeartbeat({
-                status,
+                ...heartbeatData,
                 timestamp,
-                metadata,
             });
 
             // Check if we need to end any active downtime
             const activeDowntime = await downtimeService.getActiveDowntimeEvent();
-            if (activeDowntime && status === 'online') {
+            const connectionState = heartbeatData.connection_state;
+
+            if (activeDowntime && connectionState === 'up') {
                 const endedAt = new Date();
                 await downtimeService.endDowntimeEvent(activeDowntime.id, endedAt);
 
@@ -71,7 +83,10 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                 }
             }
 
-            fastify.log.info({ heartbeatId: id, status }, 'Heartbeat recorded');
+            fastify.log.info(
+                { heartbeatId: id, connection_state: connectionState },
+                'Heartbeat recorded'
+            );
 
             return reply.code(200).send({
                 success: true,

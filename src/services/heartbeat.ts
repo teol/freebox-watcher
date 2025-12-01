@@ -10,9 +10,20 @@ export interface HeartbeatRecord {
 }
 
 export interface HeartbeatInput {
-    status: string;
+    connection_state: string;
     timestamp: string | Date;
-    metadata?: Record<string, unknown> | null;
+    token?: string;
+    ipv4?: string;
+    ipv6?: string;
+    media_state?: string;
+    connection_type?: string;
+    bandwidth_down?: number;
+    bandwidth_up?: number;
+    rate_down?: number;
+    rate_up?: number;
+    bytes_down?: number;
+    bytes_up?: number;
+    [key: string]: unknown;
 }
 
 /**
@@ -25,12 +36,17 @@ export class HeartbeatService {
      * @returns The ID of the inserted heartbeat
      */
     async recordHeartbeat(heartbeatData: HeartbeatInput): Promise<number> {
-        const { status, timestamp, metadata = null } = heartbeatData;
+        const { connection_state, timestamp, token, ...additionalFields } = heartbeatData;
+
+        // Collect all additional fields into metadata, filtering out undefined values
+        const metadata = Object.fromEntries(
+            Object.entries(additionalFields).filter(([, value]) => value !== undefined)
+        );
 
         const insertData: HeartbeatsInsert = {
-            status,
+            status: connection_state,
             timestamp: new Date(timestamp),
-            metadata: metadata ? JSON.stringify(metadata) : null,
+            metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
         };
 
         const [id] = await db<HeartbeatsTable>('heartbeats').insert(insertData);
