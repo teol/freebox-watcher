@@ -5,11 +5,22 @@ export function authMiddleware(
     reply: FastifyReply,
     done: HookHandlerDoneFunction
 ): void {
+    const apiKey = process.env.API_KEY;
+
+    // Prevent empty API key from being considered valid
+    if (!apiKey || apiKey.trim().length === 0) {
+        void reply.code(500).send({
+            error: 'Internal Server Error',
+            message: 'API key not configured',
+        });
+        return;
+    }
+
     // Check for token in request body first (for compatibility with new payload format)
     const bodyToken = (request.body as { token?: string })?.token;
 
     if (bodyToken) {
-        if (bodyToken !== process.env.API_KEY) {
+        if (bodyToken !== apiKey) {
             void reply.code(401).send({
                 error: 'Unauthorized',
                 message: 'Invalid API key',
@@ -41,7 +52,7 @@ export function authMiddleware(
         return;
     }
 
-    if (token !== process.env.API_KEY) {
+    if (token !== apiKey) {
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Invalid API key',

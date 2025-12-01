@@ -38,13 +38,10 @@ export class HeartbeatService {
     async recordHeartbeat(heartbeatData: HeartbeatInput): Promise<number> {
         const { connection_state, timestamp, token, ...additionalFields } = heartbeatData;
 
-        // Collect all additional fields into metadata (excluding token which is for auth only)
-        const metadata: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(additionalFields)) {
-            if (key !== 'token' && value !== undefined) {
-                metadata[key] = value;
-            }
-        }
+        // Collect all additional fields into metadata, filtering out undefined values
+        const metadata = Object.fromEntries(
+            Object.entries(additionalFields).filter(([, value]) => value !== undefined)
+        );
 
         const insertData: HeartbeatsInsert = {
             status: connection_state,
