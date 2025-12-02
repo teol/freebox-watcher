@@ -193,19 +193,19 @@ Copy the generated secret and set it as `API_SECRET` in your `.env` file on the 
 5. **Client** computes HMAC-SHA256 signature of the canonical message
 6. **Client** sends request with 3 headers:
     - `Authorization: Bearer <hmac_signature>`
-    - `X-Timestamp: <unix_timestamp>`
-    - `X-Nonce: <random_string>`
+    - `Signature-Timestamp: <unix_timestamp>`
+    - `Signature-Nonce: <random_string>`
 7. **Server** reconstructs the canonical message and verifies the signature
-8. **Server** checks timestamp is not expired (max 5 minutes old)
+8. **Server** checks timestamp is not expired (max 60 seconds old)
 
 ### Required Headers
 
 All API requests must include these three headers:
 
 ```
-Authorization: Bearer <hmac_signature_in_hex>
-X-Timestamp: <unix_timestamp_in_seconds>
-X-Nonce: <random_string>
+Authorization: Bearer <hmac_signature_in_base64url>
+Signature-Timestamp: <unix_timestamp_in_seconds>
+Signature-Nonce: <random_string>
 ```
 
 ### Canonical Message Format
@@ -248,15 +248,15 @@ function makeAuthenticatedRequest(method, path, body = null) {
     const canonicalMessage = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
 
     // Compute HMAC signature
-    const signature = createHmac('sha256', API_SECRET).update(canonicalMessage).digest('hex');
+    const signature = createHmac('sha256', API_SECRET).update(canonicalMessage).digest('base64url');
 
     // Make request
     return fetch(`${API_URL}${path}`, {
         method: method,
         headers: {
             Authorization: `Bearer ${signature}`,
-            'X-Timestamp': timestamp,
-            'X-Nonce': nonce,
+            'Signature-Timestamp': timestamp,
+            'Signature-Nonce': nonce,
             'Content-Type': 'application/json',
         },
         body: body ? JSON.stringify(body) : null,
@@ -277,6 +277,7 @@ import os
 import time
 import hmac
 import hashlib
+import base64
 import secrets
 import requests
 
@@ -296,13 +297,14 @@ def make_authenticated_request(method, path, body=None):
         API_SECRET,
         canonical_message.encode('utf-8'),
         hashlib.sha256
-    ).hexdigest()
+    ).digest()
+    signature_b64url = base64.urlsafe_b64encode(signature).decode('utf-8').rstrip('=')
 
     # Make request
     headers = {
-        'Authorization': f'Bearer {signature}',
-        'X-Timestamp': timestamp,
-        'X-Nonce': nonce,
+        'Authorization': f'Bearer {signature_b64url}',
+        'Signature-Timestamp': timestamp,
+        'Signature-Nonce': nonce,
         'Content-Type': 'application/json'
     }
 
@@ -337,14 +339,14 @@ NONCE=$(openssl rand -hex 16)
 # Build canonical message
 CANONICAL_MESSAGE="${METHOD}:${PATH}:${TIMESTAMP}:${NONCE}"
 
-# Compute HMAC signature
-SIGNATURE=$(echo -n "$CANONICAL_MESSAGE" | openssl dgst -sha256 -hmac "$API_SECRET" | awk '{print $2}')
+# Compute HMAC signature (base64url encoding)
+SIGNATURE=$(echo -n "$CANONICAL_MESSAGE" | openssl dgst -sha256 -hmac "$API_SECRET" -binary | base64 | tr '+/' '-_' | tr -d '=')
 
 # Make request
 curl -X "$METHOD" "${API_URL}${PATH}" \
   -H "Authorization: Bearer $SIGNATURE" \
-  -H "X-Timestamp: $TIMESTAMP" \
-  -H "X-Nonce: $NONCE" \
+  -H "Signature-Timestamp: $TIMESTAMP" \
+  -H "Signature-Nonce: $NONCE" \
   -H "Content-Type: application/json" \
   -d '{
     "connection_state": "up",
@@ -361,6 +363,7 @@ import (
     "crypto/hmac"
     "crypto/rand"
     "crypto/sha256"
+    "encoding/base64"
     "encoding/hex"
     "fmt"
     "io"
@@ -380,7 +383,7 @@ func computeSignature(method, path, timestamp, nonce, secret string) string {
     message := fmt.Sprintf("%s:%s:%s:%s", strings.ToUpper(method), path, timestamp, nonce)
     mac := hmac.New(sha256.New, []byte(secret))
     mac.Write([]byte(message))
-    return hex.EncodeToString(mac.Sum(nil))
+    return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func makeAuthenticatedRequest(method, path, body string) (*http.Response, error) {
@@ -402,8 +405,8 @@ func makeAuthenticatedRequest(method, path, body string) (*http.Response, error)
 
     // Add headers
     req.Header.Set("Authorization", "Bearer "+signature)
-    req.Header.Set("X-Timestamp", timestamp)
-    req.Header.Set("X-Nonce", nonce)
+    req.Header.Set("Signature-Timestamp", timestamp)
+    req.Header.Set("Signature-Nonce", nonce)
     req.Header.Set("Content-Type", "application/json")
 
     // Send request
@@ -447,7 +450,7 @@ All authentication failures return the same generic error to prevent information
 
 1. **✅ HMAC-SHA256**: Cryptographically secure signature scheme
 2. **✅ Timing-safe comparison**: Prevents timing attacks on signature validation
-3. **✅ Timestamp expiration**: Requests expire after 5 minutes (prevents old replay attacks)
+3. **✅ Timestamp expiration**: Requests expire after 60 seconds (prevents old replay attacks)
 4. **✅ Nonce requirement**: Random nonce per request (prevents replay attacks within time window)
 5. **✅ Generic error messages**: All auth failures return same message (prevents information leakage)
 6. **✅ Rate limiting**: 5 requests/minute prevents brute-force attacks
@@ -485,11 +488,11 @@ All authentication failures return the same generic error to prevent information
 **"Authentication failed" - Check:**
 
 - API secret matches on client and server
-- Timestamp is current (within 5 minutes)
+- Timestamp is current (within 60 seconds)
 - Nonce is non-empty
 - Canonical message format is correct: `METHOD:PATH:TIMESTAMP:NONCE`
 - METHOD is uppercase
-- Signature is hex-encoded
+- Signature is base64url-encoded
 - All 3 headers are present
 
 **"Rate limit exceeded" - Solution:**

@@ -22,7 +22,7 @@ describe('Heartbeat Routes', () => {
      */
     function computeHmac(method: string, path: string, timestamp: string, nonce: string): string {
         const message = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
-        return createHmac('sha256', testApiSecret).update(message).digest('hex');
+        return createHmac('sha256', testApiSecret).update(message).digest('base64url');
     }
 
     /**
@@ -82,8 +82,8 @@ describe('Heartbeat Routes', () => {
             url: '/heartbeat',
             headers: {
                 authorization: `Bearer ${signature}`,
-                'x-timestamp': timestamp,
-                'x-nonce': nonce,
+                'signature-timestamp': timestamp,
+                'signature-nonce': nonce,
             },
             payload: {
                 connection_state: 'up',
@@ -106,8 +106,8 @@ describe('Heartbeat Routes', () => {
             url: '/heartbeat',
             headers: {
                 authorization: `Bearer ${signature}`,
-                'x-timestamp': timestamp,
-                'x-nonce': nonce,
+                'signature-timestamp': timestamp,
+                'signature-nonce': nonce,
             },
             payload: {
                 connection_state: 'up',
@@ -127,8 +127,8 @@ describe('Heartbeat Routes', () => {
             url: '/heartbeat',
             headers: {
                 authorization: `Bearer ${signature}`,
-                'x-timestamp': timestamp,
-                'x-nonce': nonce,
+                'signature-timestamp': timestamp,
+                'signature-nonce': nonce,
             },
             payload: {
                 connection_state: 'up',

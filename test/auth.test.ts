@@ -14,7 +14,7 @@ describe('HMAC Authentication Middleware', () => {
      */
     function computeHmac(method: string, path: string, timestamp: string, nonce: string): string {
         const message = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
-        return createHmac('sha256', VALID_API_SECRET).update(message).digest('hex');
+        return createHmac('sha256', VALID_API_SECRET).update(message).digest('base64url');
     }
 
     /**
@@ -62,8 +62,8 @@ describe('HMAC Authentication Middleware', () => {
                 method: 'GET',
                 url: '/test-protected',
                 headers: {
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -73,7 +73,7 @@ describe('HMAC Authentication Middleware', () => {
             assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
         });
 
-        it('should reject requests without X-Timestamp header', async () => {
+        it('should reject requests without Signature-Timestamp header', async () => {
             const nonce = generateNonce();
             const signature = 'fake-signature';
 
@@ -82,7 +82,7 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-nonce': nonce,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -92,7 +92,7 @@ describe('HMAC Authentication Middleware', () => {
             assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
         });
 
-        it('should reject requests without X-Nonce header', async () => {
+        it('should reject requests without Signature-Nonce header', async () => {
             const timestamp = getCurrentTimestamp();
             const signature = 'fake-signature';
 
@@ -101,7 +101,7 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
+                    'signature-timestamp': timestamp,
                 },
             });
 
@@ -121,8 +121,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -142,8 +142,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -162,8 +162,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-post-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
                 payload: {
                     data: 'some data',
@@ -186,8 +186,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -207,8 +207,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -219,9 +219,9 @@ describe('HMAC Authentication Middleware', () => {
     });
 
     describe('Timestamp Validation', () => {
-        it('should reject expired timestamp (older than 5 minutes)', async () => {
+        it('should reject expired timestamp (older than 60 seconds)', async () => {
             const nonce = generateNonce();
-            const expiredTimestamp = (Math.floor(Date.now() / 1000) - 400).toString(); // 6min 40s ago
+            const expiredTimestamp = (Math.floor(Date.now() / 1000) - 61).toString(); // 61 seconds ago
             const signature = computeHmac('GET', '/test-protected', expiredTimestamp, nonce);
 
             const response = await fastify.inject({
@@ -229,8 +229,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': expiredTimestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': expiredTimestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -249,8 +249,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': futureTimestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': futureTimestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -269,8 +269,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': invalidTimestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': invalidTimestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -289,8 +289,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -309,8 +309,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': emptyNonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': emptyNonce,
                 },
             });
 
@@ -329,8 +329,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': whitespaceNonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': whitespaceNonce,
                 },
             });
 
@@ -349,8 +349,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -369,8 +369,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `bearer ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -387,8 +387,8 @@ describe('HMAC Authentication Middleware', () => {
                 url: '/test-protected',
                 headers: {
                     authorization: `Bearer    ${signature}`,
-                    'x-timestamp': timestamp,
-                    'x-nonce': nonce,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
                 },
             });
 
@@ -405,12 +405,12 @@ describe('HMAC Authentication Middleware', () => {
             const testCases = [
                 { headers: {} }, // Missing all headers
                 { headers: { authorization: 'Bearer fake' } }, // Missing timestamp & nonce
-                { headers: { authorization: 'Bearer fake', 'x-timestamp': timestamp } }, // Missing nonce
+                { headers: { authorization: 'Bearer fake', 'signature-timestamp': timestamp } }, // Missing nonce
                 {
                     headers: {
                         authorization: 'Bearer wrong',
-                        'x-timestamp': timestamp,
-                        'x-nonce': nonce,
+                        'signature-timestamp': timestamp,
+                        'signature-nonce': nonce,
                     },
                 }, // Wrong signature
             ];

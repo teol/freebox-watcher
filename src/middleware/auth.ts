@@ -7,18 +7,18 @@ import { type FastifyReply, type FastifyRequest, type HookHandlerDoneFunction } 
 const MIN_API_SECRET_LENGTH = 32;
 
 /**
- * Maximum age of a request timestamp in seconds (5 minutes)
+ * Maximum age of a request timestamp in seconds (60 seconds)
  */
-const MAX_TIMESTAMP_AGE = 300;
+const MAX_TIMESTAMP_AGE = 60;
 
 /**
  * Computes HMAC-SHA256 signature for the given message
  * @param message The message to sign
  * @param secret The secret key
- * @returns The HMAC signature in hexadecimal format
+ * @returns The HMAC signature in base64url format
  */
 function computeHmac(message: string, secret: string): string {
-    return createHmac('sha256', secret).update(message).digest('hex');
+    return createHmac('sha256', secret).update(message).digest('base64url');
 }
 
 /**
@@ -97,8 +97,8 @@ function buildCanonicalMessage(
  *
  * Authenticates requests using HMAC-SHA256 signatures with the following headers:
  * - Authorization: Bearer <hmac_signature>
- * - X-Timestamp: <unix_timestamp>
- * - X-Nonce: <random_string>
+ * - Signature-Timestamp: <unix_timestamp>
+ * - Signature-Nonce: <random_string>
  *
  * The HMAC signature is computed over: METHOD:PATH:TIMESTAMP:NONCE
  */
@@ -129,8 +129,8 @@ export function authMiddleware(
 
     // Extract required headers
     const authHeader = request.headers.authorization;
-    const timestampHeader = request.headers['x-timestamp'] as string | undefined;
-    const nonceHeader = request.headers['x-nonce'] as string | undefined;
+    const timestampHeader = request.headers['signature-timestamp'] as string | undefined;
+    const nonceHeader = request.headers['signature-nonce'] as string | undefined;
 
     // Extract signature from Authorization header
     const signature = extractBearerToken(authHeader);
