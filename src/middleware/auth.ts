@@ -76,20 +76,22 @@ function isValidTimestamp(timestamp: number): boolean {
 
 /**
  * Builds the canonical message for HMAC signature
- * Format: METHOD:PATH:TIMESTAMP:NONCE
+ * Format: method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body=...
  * @param method HTTP method (GET, POST, etc.)
  * @param path Request path
  * @param timestamp Unix timestamp
  * @param nonce Random nonce
+ * @param body Request body as JSON string (empty string for GET requests)
  * @returns The canonical message string
  */
 function buildCanonicalMessage(
     method: string,
     path: string,
     timestamp: string,
-    nonce: string
+    nonce: string,
+    body: string
 ): string {
-    return `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
+    return `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${body}`;
 }
 
 /**
@@ -100,7 +102,7 @@ function buildCanonicalMessage(
  * - Signature-Timestamp: <unix_timestamp>
  * - Signature-Nonce: <random_string>
  *
- * The HMAC signature is computed over: METHOD:PATH:TIMESTAMP:NONCE
+ * The HMAC signature is computed over: method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body=BODY
  */
 export function authMiddleware(
     request: FastifyRequest,
@@ -163,12 +165,16 @@ export function authMiddleware(
         return;
     }
 
+    // Get request body as JSON string (empty string for GET requests or no body)
+    const bodyString = request.body ? JSON.stringify(request.body) : '';
+
     // Build canonical message
     const canonicalMessage = buildCanonicalMessage(
         request.method,
         request.url,
         timestampHeader,
-        nonceHeader
+        nonceHeader,
+        bodyString
     );
 
     // Compute expected HMAC signature

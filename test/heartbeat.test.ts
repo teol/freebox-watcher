@@ -20,8 +20,14 @@ describe('Heartbeat Routes', () => {
     /**
      * Helper function to compute HMAC signature
      */
-    function computeHmac(method: string, path: string, timestamp: string, nonce: string): string {
-        const message = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
+    function computeHmac(
+        method: string,
+        path: string,
+        timestamp: string,
+        nonce: string,
+        body: string = ''
+    ): string {
+        const message = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${body}`;
         return createHmac('sha256', testApiSecret).update(message).digest('base64url');
     }
 
@@ -75,7 +81,12 @@ describe('Heartbeat Routes', () => {
     it('should reject heartbeat with invalid timestamp', async () => {
         const timestamp = getCurrentTimestamp();
         const nonce = generateNonce();
-        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce);
+        const payload = {
+            connection_state: 'up',
+            timestamp: 'invalid-timestamp',
+        };
+        const bodyString = JSON.stringify(payload);
+        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce, bodyString);
 
         const response = await fastify.inject({
             method: 'POST',
@@ -85,10 +96,7 @@ describe('Heartbeat Routes', () => {
                 'signature-timestamp': timestamp,
                 'signature-nonce': nonce,
             },
-            payload: {
-                connection_state: 'up',
-                timestamp: 'invalid-timestamp',
-            },
+            payload: payload,
         });
 
         assert.strictEqual(response.statusCode, 400);
@@ -99,7 +107,11 @@ describe('Heartbeat Routes', () => {
     it('should reject heartbeat with missing required fields', async () => {
         const timestamp = getCurrentTimestamp();
         const nonce = generateNonce();
-        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce);
+        const payload = {
+            connection_state: 'up',
+        };
+        const bodyString = JSON.stringify(payload);
+        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce, bodyString);
 
         const response = await fastify.inject({
             method: 'POST',
@@ -109,9 +121,7 @@ describe('Heartbeat Routes', () => {
                 'signature-timestamp': timestamp,
                 'signature-nonce': nonce,
             },
-            payload: {
-                connection_state: 'up',
-            },
+            payload: payload,
         });
 
         assert.strictEqual(response.statusCode, 400);
@@ -120,7 +130,22 @@ describe('Heartbeat Routes', () => {
     it.skip('should accept heartbeat with new payload format (requires DB)', async () => {
         const timestamp = getCurrentTimestamp();
         const nonce = generateNonce();
-        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce);
+        const payload = {
+            connection_state: 'up',
+            timestamp: new Date().toISOString(),
+            ipv4: '192.168.1.1',
+            ipv6: '2001:db8::1',
+            media_state: 'ftth',
+            connection_type: 'ethernet',
+            bandwidth_down: 1000000000,
+            bandwidth_up: 500000000,
+            rate_down: 9500,
+            rate_up: 4800,
+            bytes_down: 12345678,
+            bytes_up: 8765432,
+        };
+        const bodyString = JSON.stringify(payload);
+        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce, bodyString);
 
         const response = await fastify.inject({
             method: 'POST',
@@ -130,20 +155,7 @@ describe('Heartbeat Routes', () => {
                 'signature-timestamp': timestamp,
                 'signature-nonce': nonce,
             },
-            payload: {
-                connection_state: 'up',
-                timestamp: new Date().toISOString(),
-                ipv4: '192.168.1.1',
-                ipv6: '2001:db8::1',
-                media_state: 'ftth',
-                connection_type: 'ethernet',
-                bandwidth_down: 1000000000,
-                bandwidth_up: 500000000,
-                rate_down: 9500,
-                rate_up: 4800,
-                bytes_down: 12345678,
-                bytes_up: 8765432,
-            },
+            payload: payload,
         });
 
         if (response.statusCode !== 200) {

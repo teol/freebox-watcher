@@ -12,8 +12,14 @@ describe('HMAC Authentication Middleware', () => {
     /**
      * Helper function to compute HMAC signature
      */
-    function computeHmac(method: string, path: string, timestamp: string, nonce: string): string {
-        const message = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
+    function computeHmac(
+        method: string,
+        path: string,
+        timestamp: string,
+        nonce: string,
+        body: string = ''
+    ): string {
+        const message = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${body}`;
         return createHmac('sha256', VALID_API_SECRET).update(message).digest('base64url');
     }
 
@@ -155,7 +161,15 @@ describe('HMAC Authentication Middleware', () => {
         it('should accept POST requests with valid HMAC signature', async () => {
             const timestamp = getCurrentTimestamp();
             const nonce = generateNonce();
-            const signature = computeHmac('POST', '/test-post-protected', timestamp, nonce);
+            const payload = { data: 'some data' };
+            const bodyString = JSON.stringify(payload);
+            const signature = computeHmac(
+                'POST',
+                '/test-post-protected',
+                timestamp,
+                nonce,
+                bodyString
+            );
 
             const response = await fastify.inject({
                 method: 'POST',
@@ -165,9 +179,7 @@ describe('HMAC Authentication Middleware', () => {
                     'signature-timestamp': timestamp,
                     'signature-nonce': nonce,
                 },
-                payload: {
-                    data: 'some data',
-                },
+                payload: payload,
             });
 
             assert.strictEqual(response.statusCode, 200);

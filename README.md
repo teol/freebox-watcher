@@ -189,7 +189,7 @@ Copy the generated secret and set it as `API_SECRET` in your `.env` file on the 
 1. **Client** has the shared secret (`API_SECRET`)
 2. **Client** generates current Unix timestamp (seconds)
 3. **Client** generates a random nonce (unique per request)
-4. **Client** builds canonical message: `METHOD:PATH:TIMESTAMP:NONCE`
+4. **Client** builds canonical message: `method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body=JSON_BODY`
 5. **Client** computes HMAC-SHA256 signature of the canonical message
 6. **Client** sends request with 3 headers:
     - `Authorization: Bearer <hmac_signature>`
@@ -213,13 +213,13 @@ Signature-Nonce: <random_string>
 The message to sign must be constructed exactly as:
 
 ```
-METHOD:PATH:TIMESTAMP:NONCE
+method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body=JSON_BODY
 ```
 
 **Example:**
 
 ```
-POST:/heartbeat:1704567890:a1b2c3d4e5f6
+method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body={"connection_state":"up","timestamp":"2025-12-02T10:30:00.000Z"}
 ```
 
 **Important:**
@@ -228,24 +228,36 @@ POST:/heartbeat:1704567890:a1b2c3d4e5f6
 - `PATH` is the full request path including query string
 - `TIMESTAMP` is Unix timestamp in seconds (integer)
 - `NONCE` can be any non-empty random string (recommended: 16+ random bytes in hex)
+- `BODY` is the JSON stringified request body (empty string for GET requests)
 
 ### Client Implementation Examples
 
 #### JavaScript/TypeScript (Node.js)
 
-```javascript
+```typescript
 import { createHmac, randomBytes } from 'crypto';
 
-const API_SECRET = process.env.API_SECRET;
+const API_SECRET = process.env.API_SECRET as string;
 const API_URL = 'https://monitor.example.com';
 
-function makeAuthenticatedRequest(method, path, body = null) {
+interface RequestBody {
+    [key: string]: unknown;
+}
+
+async function makeAuthenticatedRequest(
+    method: string,
+    path: string,
+    body: RequestBody | null = null
+): Promise<Response> {
     // Generate timestamp and nonce
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const nonce = randomBytes(16).toString('hex');
 
+    // Stringify body (empty string for GET requests)
+    const bodyString = body ? JSON.stringify(body) : '';
+
     // Build canonical message
-    const canonicalMessage = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
+    const canonicalMessage = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${bodyString}`;
 
     // Compute HMAC signature
     const signature = createHmac('sha256', API_SECRET).update(canonicalMessage).digest('base64url');
@@ -259,15 +271,22 @@ function makeAuthenticatedRequest(method, path, body = null) {
             'Signature-Nonce': nonce,
             'Content-Type': 'application/json',
         },
-        body: body ? JSON.stringify(body) : null,
+        body: bodyString || undefined,
     });
 }
 
 // Example usage
-await makeAuthenticatedRequest('POST', '/heartbeat', {
+const response = await makeAuthenticatedRequest('POST', '/heartbeat', {
     connection_state: 'up',
     timestamp: new Date().toISOString(),
 });
+
+if (response.ok) {
+    const data = await response.json();
+    console.log('Heartbeat sent successfully:', data);
+} else {
+    console.error('Failed to send heartbeat:', response.status, await response.text());
+}
 ```
 
 #### Python
@@ -278,6 +297,7 @@ import time
 import hmac
 import hashlib
 import base64
+import json
 import secrets
 import requests
 
@@ -289,8 +309,11 @@ def make_authenticated_request(method, path, body=None):
     timestamp = str(int(time.time()))
     nonce = secrets.token_hex(16)
 
+    # Stringify body (empty string for GET requests)
+    body_string = json.dumps(body) if body else ''
+
     # Build canonical message
-    canonical_message = f"{method.upper()}:{path}:{timestamp}:{nonce}"
+    canonical_message = f"method={method.upper()};path={path};ts={timestamp};nonce={nonce};body={body_string}"
 
     # Compute HMAC signature
     signature = hmac.new(
@@ -316,10 +339,15 @@ def make_authenticated_request(method, path, body=None):
     )
 
 # Example usage
-make_authenticated_request('POST', '/heartbeat', {
+response = make_authenticated_request('POST', '/heartbeat', {
     'connection_state': 'up',
-    'timestamp': '2025-01-15T10:30:00.000Z'
+    'timestamp': '2025-12-02T10:30:00.000Z'
 })
+
+if response.status_code == 200:
+    print('Heartbeat sent successfully:', response.json())
+else:
+    print(f'Failed to send heartbeat: {response.status_code}', response.text)
 ```
 
 #### Bash/cURL
@@ -336,8 +364,11 @@ PATH="/heartbeat"
 TIMESTAMP=$(date +%s)
 NONCE=$(openssl rand -hex 16)
 
-# Build canonical message
-CANONICAL_MESSAGE="${METHOD}:${PATH}:${TIMESTAMP}:${NONCE}"
+# Request body
+BODY='{"connection_state":"up","timestamp":"2025-12-02T10:30:00.000Z"}'
+
+# Build canonical message (note: no spaces in JSON for consistency)
+CANONICAL_MESSAGE="method=${METHOD};path=${PATH};ts=${TIMESTAMP};nonce=${NONCE};body=${BODY}"
 
 # Compute HMAC signature (base64url encoding)
 SIGNATURE=$(echo -n "$CANONICAL_MESSAGE" | openssl dgst -sha256 -hmac "$API_SECRET" -binary | base64 | tr '+/' '-_' | tr -d '=')
@@ -348,10 +379,7 @@ curl -X "$METHOD" "${API_URL}${PATH}" \
   -H "Signature-Timestamp: $TIMESTAMP" \
   -H "Signature-Nonce: $NONCE" \
   -H "Content-Type: application/json" \
-  -d '{
-    "connection_state": "up",
-    "timestamp": "2025-01-15T10:30:00.000Z"
-  }'
+  -d "$BODY"
 ```
 
 #### Go
@@ -360,11 +388,13 @@ curl -X "$METHOD" "${API_URL}${PATH}" \
 package main
 
 import (
+    "bytes"
     "crypto/hmac"
     "crypto/rand"
     "crypto/sha256"
     "encoding/base64"
     "encoding/hex"
+    "encoding/json"
     "fmt"
     "io"
     "net/http"
@@ -379,14 +409,15 @@ func generateNonce() string {
     return hex.EncodeToString(bytes)
 }
 
-func computeSignature(method, path, timestamp, nonce, secret string) string {
-    message := fmt.Sprintf("%s:%s:%s:%s", strings.ToUpper(method), path, timestamp, nonce)
+func computeSignature(method, path, timestamp, nonce, bodyString, secret string) string {
+    message := fmt.Sprintf("method=%s;path=%s;ts=%s;nonce=%s;body=%s",
+        strings.ToUpper(method), path, timestamp, nonce, bodyString)
     mac := hmac.New(sha256.New, []byte(secret))
     mac.Write([]byte(message))
     return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func makeAuthenticatedRequest(method, path, body string) (*http.Response, error) {
+func makeAuthenticatedRequest(method, path string, body interface{}) (*http.Response, error) {
     apiSecret := os.Getenv("API_SECRET")
     apiURL := "https://monitor.example.com"
 
@@ -394,11 +425,27 @@ func makeAuthenticatedRequest(method, path, body string) (*http.Response, error)
     timestamp := fmt.Sprintf("%d", time.Now().Unix())
     nonce := generateNonce()
 
+    // Stringify body (empty string for GET requests)
+    var bodyString string
+    var bodyBytes []byte
+    if body != nil {
+        bodyBytes, _ = json.Marshal(body)
+        bodyString = string(bodyBytes)
+    } else {
+        bodyString = ""
+    }
+
     // Compute signature
-    signature := computeSignature(method, path, timestamp, nonce, apiSecret)
+    signature := computeSignature(method, path, timestamp, nonce, bodyString, apiSecret)
 
     // Create request
-    req, err := http.NewRequest(method, apiURL+path, strings.NewReader(body))
+    var req *http.Request
+    var err error
+    if len(bodyBytes) > 0 {
+        req, err = http.NewRequest(method, apiURL+path, bytes.NewReader(bodyBytes))
+    } else {
+        req, err = http.NewRequest(method, apiURL+path, nil)
+    }
     if err != nil {
         return nil, err
     }
@@ -412,6 +459,28 @@ func makeAuthenticatedRequest(method, path, body string) (*http.Response, error)
     // Send request
     client := &http.Client{}
     return client.Do(req)
+}
+
+// Example usage
+func main() {
+    heartbeat := map[string]interface{}{
+        "connection_state": "up",
+        "timestamp":        "2025-12-02T10:30:00.000Z",
+    }
+
+    resp, err := makeAuthenticatedRequest("POST", "/heartbeat", heartbeat)
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    defer resp.Body.Close()
+
+    body, _ := io.ReadAll(resp.Body)
+    if resp.StatusCode == 200 {
+        fmt.Printf("Heartbeat sent successfully: %s\n", body)
+    } else {
+        fmt.Printf("Failed to send heartbeat: %d %s\n", resp.StatusCode, body)
+    }
 }
 ```
 
@@ -490,8 +559,9 @@ All authentication failures return the same generic error to prevent information
 - API secret matches on client and server
 - Timestamp is current (within 60 seconds)
 - Nonce is non-empty
-- Canonical message format is correct: `METHOD:PATH:TIMESTAMP:NONCE`
+- Canonical message format is correct: `method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body=BODY`
 - METHOD is uppercase
+- BODY is JSON stringified (empty string for GET requests, no extra spaces)
 - Signature is base64url-encoded
 - All 3 headers are present
 
