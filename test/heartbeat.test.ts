@@ -1,11 +1,11 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { createHmac, randomBytes } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { heartbeatRoutes } from '../src/routes/heartbeat.js';
 import { type HeartbeatInput } from '../src/services/heartbeat.js';
 import { NotificationService } from '../src/services/notification.js';
 import { DowntimeMonitor } from '../src/services/downtimeMonitor.js';
+import { computeHmac, getCurrentTimestamp, generateNonce } from './helpers.js';
 
 interface HeartbeatResponseBody {
     success?: boolean;
@@ -16,34 +16,6 @@ interface HeartbeatResponseBody {
 describe('Heartbeat Routes', () => {
     let fastify: FastifyInstance;
     const testApiSecret = 'test-heartbeat-secret-32-chars-long';
-
-    /**
-     * Helper function to compute HMAC signature
-     */
-    function computeHmac(
-        method: string,
-        path: string,
-        timestamp: string,
-        nonce: string,
-        body: string = ''
-    ): string {
-        const message = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${body}`;
-        return createHmac('sha256', testApiSecret).update(message).digest('base64url');
-    }
-
-    /**
-     * Helper function to get current Unix timestamp
-     */
-    function getCurrentTimestamp(): string {
-        return Math.floor(Date.now() / 1000).toString();
-    }
-
-    /**
-     * Helper function to generate a random nonce
-     */
-    function generateNonce(): string {
-        return randomBytes(16).toString('hex');
-    }
 
     before(async () => {
         // Set up test environment
@@ -86,7 +58,14 @@ describe('Heartbeat Routes', () => {
             timestamp: 'invalid-timestamp',
         };
         const bodyString = JSON.stringify(payload);
-        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce, bodyString);
+        const signature = computeHmac(
+            'POST',
+            '/heartbeat',
+            timestamp,
+            nonce,
+            bodyString,
+            testApiSecret
+        );
 
         const response = await fastify.inject({
             method: 'POST',
@@ -111,7 +90,14 @@ describe('Heartbeat Routes', () => {
             connection_state: 'up',
         };
         const bodyString = JSON.stringify(payload);
-        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce, bodyString);
+        const signature = computeHmac(
+            'POST',
+            '/heartbeat',
+            timestamp,
+            nonce,
+            bodyString,
+            testApiSecret
+        );
 
         const response = await fastify.inject({
             method: 'POST',
@@ -145,7 +131,14 @@ describe('Heartbeat Routes', () => {
             bytes_up: 8765432,
         };
         const bodyString = JSON.stringify(payload);
-        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce, bodyString);
+        const signature = computeHmac(
+            'POST',
+            '/heartbeat',
+            timestamp,
+            nonce,
+            bodyString,
+            testApiSecret
+        );
 
         const response = await fastify.inject({
             method: 'POST',

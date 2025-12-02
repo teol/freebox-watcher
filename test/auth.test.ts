@@ -1,41 +1,13 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { createHmac, randomBytes } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { authMiddleware } from '../src/middleware/auth.js';
+import { computeHmac, getCurrentTimestamp, generateNonce } from './helpers.js';
 
 describe('HMAC Authentication Middleware', () => {
     let fastify: FastifyInstance;
     const VALID_API_SECRET = 'test-api-secret-32-characters-long-for-hmac';
     const GENERIC_ERROR_MESSAGE = 'Authentication failed';
-
-    /**
-     * Helper function to compute HMAC signature
-     */
-    function computeHmac(
-        method: string,
-        path: string,
-        timestamp: string,
-        nonce: string,
-        body: string = ''
-    ): string {
-        const message = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${body}`;
-        return createHmac('sha256', VALID_API_SECRET).update(message).digest('base64url');
-    }
-
-    /**
-     * Helper function to get current Unix timestamp
-     */
-    function getCurrentTimestamp(): string {
-        return Math.floor(Date.now() / 1000).toString();
-    }
-
-    /**
-     * Helper function to generate a random nonce
-     */
-    function generateNonce(): string {
-        return randomBytes(16).toString('hex');
-    }
 
     before(async () => {
         // Set up test environment
@@ -141,7 +113,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should accept requests with valid HMAC signature', async () => {
             const timestamp = getCurrentTimestamp();
             const nonce = generateNonce();
-            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -168,7 +147,8 @@ describe('HMAC Authentication Middleware', () => {
                 '/test-post-protected',
                 timestamp,
                 nonce,
-                bodyString
+                bodyString,
+                VALID_API_SECRET
             );
 
             const response = await fastify.inject({
@@ -191,7 +171,14 @@ describe('HMAC Authentication Middleware', () => {
             const timestamp = getCurrentTimestamp();
             const nonce = generateNonce();
             // Generate signature for POST but send GET
-            const signature = computeHmac('POST', '/test-protected', timestamp, nonce);
+            const signature = computeHmac(
+                'POST',
+                '/test-protected',
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -212,7 +199,14 @@ describe('HMAC Authentication Middleware', () => {
             const timestamp = getCurrentTimestamp();
             const nonce = generateNonce();
             // Generate signature for different path
-            const signature = computeHmac('GET', '/wrong-path', timestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/wrong-path',
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -234,7 +228,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should reject expired timestamp (older than 60 seconds)', async () => {
             const nonce = generateNonce();
             const expiredTimestamp = (Math.floor(Date.now() / 1000) - 61).toString(); // 61 seconds ago
-            const signature = computeHmac('GET', '/test-protected', expiredTimestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                expiredTimestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -254,7 +255,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should reject future timestamp (more than 1 minute ahead)', async () => {
             const nonce = generateNonce();
             const futureTimestamp = (Math.floor(Date.now() / 1000) + 120).toString(); // 2 minutes in future
-            const signature = computeHmac('GET', '/test-protected', futureTimestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                futureTimestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -274,7 +282,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should reject invalid timestamp format', async () => {
             const nonce = generateNonce();
             const invalidTimestamp = 'not-a-timestamp';
-            const signature = computeHmac('GET', '/test-protected', invalidTimestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                invalidTimestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -294,7 +309,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should accept timestamp within valid window', async () => {
             const nonce = generateNonce();
             const timestamp = getCurrentTimestamp();
-            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -314,7 +336,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should reject empty nonce', async () => {
             const timestamp = getCurrentTimestamp();
             const emptyNonce = '';
-            const signature = computeHmac('GET', '/test-protected', timestamp, emptyNonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                timestamp,
+                emptyNonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -334,7 +363,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should reject whitespace-only nonce', async () => {
             const timestamp = getCurrentTimestamp();
             const whitespaceNonce = '   ';
-            const signature = computeHmac('GET', '/test-protected', timestamp, whitespaceNonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                timestamp,
+                whitespaceNonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -354,7 +390,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should accept valid nonce', async () => {
             const timestamp = getCurrentTimestamp();
             const nonce = generateNonce();
-            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -374,7 +417,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should accept Bearer scheme in lowercase', async () => {
             const timestamp = getCurrentTimestamp();
             const nonce = generateNonce();
-            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',
@@ -392,7 +442,14 @@ describe('HMAC Authentication Middleware', () => {
         it('should accept Bearer scheme with multiple spaces', async () => {
             const timestamp = getCurrentTimestamp();
             const nonce = generateNonce();
-            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+            const signature = computeHmac(
+                'GET',
+                '/test-protected',
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
 
             const response = await fastify.inject({
                 method: 'GET',

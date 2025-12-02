@@ -12,6 +12,11 @@ const MIN_API_SECRET_LENGTH = 32;
 const MAX_TIMESTAMP_AGE = 60;
 
 /**
+ * Maximum allowed future timestamp skew in seconds (10 seconds for clock drift)
+ */
+const MAX_FUTURE_SKEW = 10;
+
+/**
  * Computes HMAC-SHA256 signature for the given message
  * @param message The message to sign
  * @param secret The secret key
@@ -70,8 +75,8 @@ function isValidTimestamp(timestamp: number): boolean {
     const age = Math.abs(now - timestamp);
 
     // Reject if timestamp is more than MAX_TIMESTAMP_AGE seconds old
-    // Also reject if timestamp is in the future (with small tolerance)
-    return age <= MAX_TIMESTAMP_AGE && timestamp <= now + 60;
+    // Also reject if timestamp is too far in the future (allow small tolerance for clock skew)
+    return age <= MAX_TIMESTAMP_AGE && timestamp <= now + MAX_FUTURE_SKEW;
 }
 
 /**
@@ -131,8 +136,21 @@ export function authMiddleware(
 
     // Extract required headers
     const authHeader = request.headers.authorization;
-    const timestampHeader = request.headers['signature-timestamp'] as string | undefined;
-    const nonceHeader = request.headers['signature-nonce'] as string | undefined;
+    const timestampHeader = request.headers['signature-timestamp'];
+    const nonceHeader = request.headers['signature-nonce'];
+
+    // Validate header types (reject if arrays - multiple values sent)
+    if (
+        typeof authHeader !== 'string' ||
+        typeof timestampHeader !== 'string' ||
+        typeof nonceHeader !== 'string'
+    ) {
+        void reply.code(401).send({
+            error: 'Unauthorized',
+            message: 'Authentication failed',
+        });
+        return;
+    }
 
     // Extract signature from Authorization header
     const signature = extractBearerToken(authHeader);
