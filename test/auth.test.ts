@@ -37,7 +37,10 @@ describe('Authentication Middleware', () => {
         assert.strictEqual(response.statusCode, 401);
         const body = JSON.parse(response.body) as { error: string; message: string };
         assert.strictEqual(body.error, 'Unauthorized');
-        assert.strictEqual(body.message, 'Missing Authorization header or token in body');
+        assert.strictEqual(
+            body.message,
+            'Missing authentication. Use Authorization: Bearer <token> header'
+        );
     });
 
     it('should reject requests with invalid Authorization header format', async () => {
@@ -52,7 +55,10 @@ describe('Authentication Middleware', () => {
         assert.strictEqual(response.statusCode, 401);
         const body = JSON.parse(response.body) as { error: string; message: string };
         assert.strictEqual(body.error, 'Unauthorized');
-        assert.ok(body.message.includes('Invalid Authorization header format'));
+        assert.strictEqual(
+            body.message,
+            'Missing authentication. Use Authorization: Bearer <token> header'
+        );
     });
 
     it('should reject requests with invalid API key', async () => {
@@ -67,7 +73,7 @@ describe('Authentication Middleware', () => {
         assert.strictEqual(response.statusCode, 401);
         const body = JSON.parse(response.body) as { error: string; message: string };
         assert.strictEqual(body.error, 'Unauthorized');
-        assert.strictEqual(body.message, 'Invalid API key');
+        assert.strictEqual(body.message, 'Invalid API token');
     });
 
     it('should accept requests with valid API key in Authorization header', async () => {
@@ -112,6 +118,6 @@ describe('Authentication Middleware', () => {
         assert.strictEqual(response.statusCode, 401);
         const body = JSON.parse(response.body) as { error: string; message: string };
         assert.strictEqual(body.error, 'Unauthorized');
-        assert.strictEqual(body.message, 'Invalid API key');
+        assert.strictEqual(body.message, 'Invalid API token');
     });
 });

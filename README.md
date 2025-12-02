@@ -9,7 +9,7 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 ## Features
 
 - 📡 HTTP heartbeat endpoint for receiving status updates
-- 🔒 Simple authentication mechanism to secure the API
+- 🔒 Secure Bearer token authentication with timing-attack protection
 - 📊 MariaDB storage for heartbeat history
 - 🔔 Automatic downtime detection (5 minutes without heartbeat)
 - 📲 Telegram notifications for downtime alerts and recovery
@@ -125,7 +125,7 @@ TELEGRAM_CHAT_ID=your-telegram-chat-id
 
 - `PORT`: Port number for the API server (default: 3001)
 - `HOST`: Network interface for the API server (default: 127.0.0.1 for local-only access)
-- `API_KEY`: Authentication key for securing the heartbeat endpoint
+- `API_KEY`: Authentication key for securing the heartbeat endpoint (minimum 16 characters)
 - `DB_HOST`: MariaDB host address
 - `DB_PORT`: MariaDB port (default: 3306)
 - `DB_USER`: Database user
@@ -137,6 +137,30 @@ TELEGRAM_CHAT_ID=your-telegram-chat-id
 - `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
+
+### Generating a Secure API Key
+
+The API key must be at least 16 characters long. Generate a secure random key using one of these methods:
+
+**Using OpenSSL (Linux/macOS):**
+
+```bash
+openssl rand -base64 32
+```
+
+**Using Node.js (any platform):**
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+**Example output:**
+
+```
+xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=
+```
+
+Copy the generated key and set it as the `API_KEY` value in your `.env` file.
 
 ## Database Schema
 
@@ -150,6 +174,134 @@ Run migrations to create the schema:
 ```bash
 yarn db:migrate
 ```
+
+## API Authentication
+
+The API uses **Bearer token authentication** for securing all endpoints. All requests must include an `Authorization` header with a valid API token.
+
+### Authentication Header Format
+
+```
+Authorization: Bearer <your-api-key>
+```
+
+### How Clients Should Authenticate
+
+All API requests must include the Bearer token in the `Authorization` header. The token value is the same as the `API_KEY` configured in your `.env` file.
+
+#### Example with cURL
+
+```bash
+curl -X POST https://monitor.example.com/heartbeat \
+  -H "Authorization: Bearer xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connection_state": "up",
+    "timestamp": "2025-01-15T10:30:00.000Z",
+    "ipv4": "192.168.1.100"
+  }'
+```
+
+#### Example with JavaScript/TypeScript (fetch)
+
+```javascript
+const response = await fetch('https://monitor.example.com/heartbeat', {
+    method: 'POST',
+    headers: {
+        Authorization: 'Bearer xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=',
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        connection_state: 'up',
+        timestamp: new Date().toISOString(),
+        ipv4: '192.168.1.100',
+    }),
+});
+
+const data = await response.json();
+console.log(data);
+```
+
+#### Example with Node.js (axios)
+
+```javascript
+const axios = require('axios');
+
+const response = await axios.post(
+    'https://monitor.example.com/heartbeat',
+    {
+        connection_state: 'up',
+        timestamp: new Date().toISOString(),
+        ipv4: '192.168.1.100',
+    },
+    {
+        headers: {
+            Authorization: 'Bearer xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=',
+        },
+    }
+);
+
+console.log(response.data);
+```
+
+#### Example with Python (requests)
+
+```python
+import requests
+from datetime import datetime
+
+response = requests.post(
+    'https://monitor.example.com/heartbeat',
+    headers={
+        'Authorization': 'Bearer xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'connection_state': 'up',
+        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'ipv4': '192.168.1.100'
+    }
+)
+
+print(response.json())
+```
+
+### Authentication Error Responses
+
+The API returns specific error codes for authentication failures:
+
+- **401 Unauthorized**: Missing or invalid Bearer token
+- **500 Internal Server Error**: API key not configured on the server
+
+#### Missing Authentication
+
+```json
+{
+    "error": "Unauthorized",
+    "message": "Missing authentication. Use Authorization: Bearer <token> header"
+}
+```
+
+#### Invalid Token
+
+```json
+{
+    "error": "Unauthorized",
+    "message": "Invalid API token"
+}
+```
+
+### Security Best Practices
+
+1. **Keep your API key secret**: Never commit your `.env` file or expose the API key in public repositories
+2. **Use HTTPS in production**: Always use a reverse proxy (Caddy/Nginx) with SSL/TLS certificates
+3. **Rotate keys periodically**: Generate a new API key every few months for enhanced security
+4. **Use environment variables**: Never hardcode API keys in your application code
+5. **Minimum key length**: Ensure your API key is at least 16 characters long (32+ recommended)
+
+### Backward Compatibility Note
+
+For backward compatibility with older clients, the API also accepts the token in the request body as a `token` field. However, this method is **deprecated** and may be removed in future versions. **Always use the `Authorization: Bearer` header for new implementations.**
 
 ## Telegram Notifications Setup
 
