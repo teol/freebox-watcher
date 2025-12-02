@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { authMiddleware } from '../src/middleware/auth.js';
 import { registerRawBodyCapture } from '../src/middleware/rawBodyCapture.js';
 import { computeHmac, getCurrentTimestamp, generateNonce } from './helpers.js';
+import { API_PREFIX } from '../src/constants/api.js';
 
 describe('HMAC Authentication Middleware', () => {
     let fastify: FastifyInstance;
@@ -499,6 +500,95 @@ describe('HMAC Authentication Middleware', () => {
                 const body = JSON.parse(response.body) as { error: string; message: string };
                 assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
             }
+        });
+    });
+
+    describe('API prefix handling', () => {
+        let prefixedFastify: FastifyInstance;
+
+        before(async () => {
+            prefixedFastify = Fastify({ logger: false });
+
+            await registerRawBodyCapture(prefixedFastify);
+
+            await prefixedFastify.register(
+                async (instance) => {
+                    instance.get(
+                        '/prefixed-protected',
+                        { preHandler: authMiddleware },
+                        async () => {
+                            return { message: 'success' };
+                        }
+                    );
+
+                    instance.get('/users/:id', { preHandler: authMiddleware }, async (request) => {
+                        const params = request.params as { id: string };
+                        return { id: params.id };
+                    });
+                },
+                { prefix: API_PREFIX }
+            );
+
+            await prefixedFastify.ready();
+        });
+
+        after(async () => {
+            await prefixedFastify.close();
+        });
+
+        it('should validate signatures when the server is mounted under a prefix', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            const signature = computeHmac(
+                'GET',
+                '/prefixed-protected',
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
+
+            const response = await prefixedFastify.inject({
+                method: 'GET',
+                url: `${API_PREFIX}/prefixed-protected`,
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 200);
+            const body = JSON.parse(response.body) as { message: string };
+            assert.strictEqual(body.message, 'success');
+        });
+
+        it('should sign resolved paths with params and query strings under a prefix', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            const resolvedPath = '/users/abc123?foo=bar';
+            const signature = computeHmac(
+                'GET',
+                resolvedPath,
+                timestamp,
+                nonce,
+                '',
+                VALID_API_SECRET
+            );
+
+            const response = await prefixedFastify.inject({
+                method: 'GET',
+                url: `${API_PREFIX}${resolvedPath}`,
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'signature-timestamp': timestamp,
+                    'signature-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 200);
+            const body = JSON.parse(response.body) as { id: string };
+            assert.strictEqual(body.id, 'abc123');
         });
     });
 });
