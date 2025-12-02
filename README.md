@@ -189,14 +189,15 @@ Copy the generated secret and set it as `API_SECRET` in your `.env` file on the 
 1. **Client** has the shared secret (`API_SECRET`)
 2. **Client** generates current Unix timestamp (seconds)
 3. **Client** generates a random nonce (unique per request)
-4. **Client** builds canonical message: `method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body=JSON_BODY`
-5. **Client** computes HMAC-SHA256 signature of the canonical message
-6. **Client** sends request with 3 headers:
+4. **Client** computes SHA256 hash of request body (base64url-encoded)
+5. **Client** builds canonical message: `method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body_sha256=HASH`
+6. **Client** computes HMAC-SHA256 signature of the canonical message
+7. **Client** sends request with 3 headers:
     - `Authorization: Bearer <hmac_signature>`
     - `Signature-Timestamp: <unix_timestamp>`
     - `Signature-Nonce: <random_string>`
-7. **Server** reconstructs the canonical message and verifies the signature
-8. **Server** checks timestamp is not expired (max 60 seconds old)
+8. **Server** reconstructs the canonical message and verifies the signature
+9. **Server** checks timestamp is not expired (max 60 seconds old)
 
 ### Required Headers
 
@@ -213,13 +214,15 @@ Signature-Nonce: <random_string>
 The message to sign must be constructed exactly as:
 
 ```
-method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body=JSON_BODY
+method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body_sha256=HASH
 ```
 
 **Example:**
 
+For a POST request with body `{"connection_state":"up","timestamp":"2025-12-02T10:30:00.000Z"}`:
+
 ```
-method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body={"connection_state":"up","timestamp":"2025-12-02T10:30:00.000Z"}
+method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body_sha256=rL0Y20zC-Fzt72VPzMSk2A
 ```
 
 **Important:**
@@ -228,14 +231,14 @@ method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body={"connection_sta
 - `PATH` is the full request path including query string
 - `TIMESTAMP` is Unix timestamp in seconds (integer)
 - `NONCE` can be any non-empty random string (recommended: 16+ random bytes in hex)
-- `BODY` is the JSON stringified request body (empty string for GET requests)
+- `HASH` is the SHA256 hash of the raw request body, encoded in base64url format (empty string results in hash of empty string for GET requests)
 
 ### Client Implementation Examples
 
 #### JavaScript/TypeScript (Node.js)
 
 ```typescript
-import { createHmac, randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes } from 'crypto';
 
 const API_SECRET = process.env.API_SECRET as string;
 const API_URL = 'https://monitor.example.com';
@@ -256,8 +259,11 @@ async function makeAuthenticatedRequest(
     // Stringify body (empty string for GET requests)
     const bodyString = body ? JSON.stringify(body) : '';
 
+    // Hash the body with SHA256
+    const bodyHash = createHash('sha256').update(bodyString).digest('base64url');
+
     // Build canonical message
-    const canonicalMessage = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${bodyString}`;
+    const canonicalMessage = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body_sha256=${bodyHash}`;
 
     // Compute HMAC signature
     const signature = createHmac('sha256', API_SECRET).update(canonicalMessage).digest('base64url');
@@ -312,8 +318,12 @@ def make_authenticated_request(method, path, body=None):
     # Stringify body (empty string for GET requests)
     body_string = json.dumps(body) if body else ''
 
+    # Hash the body with SHA256
+    body_hash = hashlib.sha256(body_string.encode('utf-8')).digest()
+    body_hash_b64url = base64.urlsafe_b64encode(body_hash).decode('utf-8').rstrip('=')
+
     # Build canonical message
-    canonical_message = f"method={method.upper()};path={path};ts={timestamp};nonce={nonce};body={body_string}"
+    canonical_message = f"method={method.upper()};path={path};ts={timestamp};nonce={nonce};body_sha256={body_hash_b64url}"
 
     # Compute HMAC signature
     signature = hmac.new(
@@ -367,8 +377,11 @@ NONCE=$(openssl rand -hex 16)
 # Request body
 BODY='{"connection_state":"up","timestamp":"2025-12-02T10:30:00.000Z"}'
 
-# Build canonical message (note: no spaces in JSON for consistency)
-CANONICAL_MESSAGE="method=${METHOD};path=${PATH};ts=${TIMESTAMP};nonce=${NONCE};body=${BODY}"
+# Hash the body with SHA256 (base64url encoding)
+BODY_HASH=$(echo -n "$BODY" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -d '=')
+
+# Build canonical message
+CANONICAL_MESSAGE="method=${METHOD};path=${PATH};ts=${TIMESTAMP};nonce=${NONCE};body_sha256=${BODY_HASH}"
 
 # Compute HMAC signature (base64url encoding)
 SIGNATURE=$(echo -n "$CANONICAL_MESSAGE" | openssl dgst -sha256 -hmac "$API_SECRET" -binary | base64 | tr '+/' '-_' | tr -d '=')
@@ -410,8 +423,13 @@ func generateNonce() string {
 }
 
 func computeSignature(method, path, timestamp, nonce, bodyString, secret string) string {
-    message := fmt.Sprintf("method=%s;path=%s;ts=%s;nonce=%s;body=%s",
-        strings.ToUpper(method), path, timestamp, nonce, bodyString)
+    // Hash the body with SHA256
+    bodyHashBytes := sha256.Sum256([]byte(bodyString))
+    bodyHash := base64.RawURLEncoding.EncodeToString(bodyHashBytes[:])
+
+    // Build canonical message
+    message := fmt.Sprintf("method=%s;path=%s;ts=%s;nonce=%s;body_sha256=%s",
+        strings.ToUpper(method), path, timestamp, nonce, bodyHash)
     mac := hmac.New(sha256.New, []byte(secret))
     mac.Write([]byte(message))
     return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
@@ -559,9 +577,9 @@ All authentication failures return the same generic error to prevent information
 - API secret matches on client and server
 - Timestamp is current (within 60 seconds)
 - Nonce is non-empty
-- Canonical message format is correct: `method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body=BODY`
+- Canonical message format is correct: `method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body_sha256=HASH`
 - METHOD is uppercase
-- BODY is JSON stringified (empty string for GET requests, no extra spaces)
+- HASH is SHA256 of the raw request body, base64url-encoded (empty string for GET requests)
 - Signature is base64url-encoded
 - All 3 headers are present
 

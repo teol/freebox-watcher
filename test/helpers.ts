@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 
 /**
  * Shared test helpers for authentication testing
@@ -10,7 +10,7 @@ import { createHmac, randomBytes } from 'node:crypto';
  * @param path Request path
  * @param timestamp Unix timestamp as string
  * @param nonce Random nonce
- * @param body Request body as JSON string (empty string for GET requests)
+ * @param body Request body as string (empty string for GET requests)
  * @param secret API secret for HMAC computation
  * @returns HMAC signature in base64url format
  */
@@ -22,7 +22,9 @@ export function computeHmac(
     body: string = '',
     secret: string
 ): string {
-    const message = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${body}`;
+    // Hash the body with SHA256 for inclusion in canonical message
+    const bodyHash = createHash('sha256').update(body).digest('base64url');
+    const message = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body_sha256=${bodyHash}`;
     return createHmac('sha256', secret).update(message).digest('base64url');
 }
 

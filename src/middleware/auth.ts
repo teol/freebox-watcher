@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { type FastifyReply, type FastifyRequest, type HookHandlerDoneFunction } from 'fastify';
 
 /**
@@ -81,12 +81,12 @@ function isValidTimestamp(timestamp: number): boolean {
 
 /**
  * Builds the canonical message for HMAC signature
- * Format: method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body=...
+ * Format: method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body_sha256=...
  * @param method HTTP method (GET, POST, etc.)
  * @param path Request path
  * @param timestamp Unix timestamp
  * @param nonce Random nonce
- * @param body Request body as JSON string (empty string for GET requests)
+ * @param body Request body as string (empty string for GET requests)
  * @returns The canonical message string
  */
 function buildCanonicalMessage(
@@ -96,7 +96,9 @@ function buildCanonicalMessage(
     nonce: string,
     body: string
 ): string {
-    return `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body=${body}`;
+    // Hash the body with SHA256 for inclusion in canonical message
+    const bodyHash = createHash('sha256').update(body).digest('base64url');
+    return `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body_sha256=${bodyHash}`;
 }
 
 /**
@@ -107,7 +109,7 @@ function buildCanonicalMessage(
  * - Signature-Timestamp: <unix_timestamp>
  * - Signature-Nonce: <random_string>
  *
- * The HMAC signature is computed over: method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body=BODY
+ * The HMAC signature is computed over: method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body_sha256=HASH
  */
 export function authMiddleware(
     request: FastifyRequest,
