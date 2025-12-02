@@ -80,6 +80,20 @@ function isValidTimestamp(timestamp: number): boolean {
 }
 
 /**
+ * Normalizes a header value to a single string
+ * Rejects headers with multiple values to avoid ambiguity
+ * @param header The header value (string | string[] | undefined)
+ * @returns The header value as a string, or undefined if invalid
+ */
+function normalizeHeader(header: string | string[] | undefined): string | undefined {
+    if (Array.isArray(header)) {
+        return header.length === 1 ? header[0] : undefined;
+    }
+
+    return header;
+}
+
+/**
  * Builds the canonical message for HMAC signature
  * Format: method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body_sha256=...
  * @param method HTTP method (GET, POST, etc.)
@@ -137,9 +151,12 @@ export function authMiddleware(
     }
 
     // Extract required headers
-    const authHeader = request.headers.authorization;
-    const timestampHeader = request.headers['signature-timestamp'];
-    const nonceHeader = request.headers['signature-nonce'];
+    const authHeader = normalizeHeader(request.headers.authorization as string | string[] | undefined);
+    const timestampHeader = normalizeHeader(request.headers['signature-timestamp'] as
+        | string
+        | string[]
+        | undefined);
+    const nonceHeader = normalizeHeader(request.headers['signature-nonce'] as string | string[] | undefined);
 
     // Validate header types (reject if arrays - multiple values sent)
     if (
@@ -190,9 +207,16 @@ export function authMiddleware(
     const bodyString = request.rawBody || '';
 
     // Build canonical message
+    // Use routerPath to keep signatures stable when the server is mounted under a base prefix
+    const routerPath = (request as FastifyRequest & { routerPath?: string }).routerPath;
+    const hasQueryString = request.url.includes('?');
+    const canonicalPath = routerPath
+        ? `${routerPath}${hasQueryString ? request.url.slice(request.url.indexOf('?')) : ''}`
+        : request.url;
+
     const canonicalMessage = buildCanonicalMessage(
         request.method,
-        request.url,
+        canonicalPath,
         timestampHeader,
         nonceHeader,
         bodyString

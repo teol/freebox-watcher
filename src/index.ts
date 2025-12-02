@@ -49,7 +49,7 @@ fastify.decorate('downtimeMonitor', downtimeMonitor);
  * Register routes
  */
 async function registerRoutes(): Promise<void> {
-    await fastify.register(heartbeatRoutes);
+    await fastify.register(heartbeatRoutes, { prefix: '/api' });
 }
 
 /**
