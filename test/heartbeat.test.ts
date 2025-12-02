@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { createHmac, randomBytes } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { heartbeatRoutes } from '../src/routes/heartbeat.js';
 import { type HeartbeatInput } from '../src/services/heartbeat.js';
@@ -14,11 +15,33 @@ interface HeartbeatResponseBody {
 
 describe('Heartbeat Routes', () => {
     let fastify: FastifyInstance;
-    const testApiKey = 'test-heartbeat-key-12345';
+    const testApiSecret = 'test-heartbeat-secret-32-chars-long';
+
+    /**
+     * Helper function to compute HMAC signature
+     */
+    function computeHmac(method: string, path: string, timestamp: string, nonce: string): string {
+        const message = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
+        return createHmac('sha256', testApiSecret).update(message).digest('hex');
+    }
+
+    /**
+     * Helper function to get current Unix timestamp
+     */
+    function getCurrentTimestamp(): string {
+        return Math.floor(Date.now() / 1000).toString();
+    }
+
+    /**
+     * Helper function to generate a random nonce
+     */
+    function generateNonce(): string {
+        return randomBytes(16).toString('hex');
+    }
 
     before(async () => {
         // Set up test environment
-        process.env.API_KEY = testApiKey;
+        process.env.API_SECRET = testApiSecret;
 
         fastify = Fastify({ logger: false });
 
@@ -50,11 +73,17 @@ describe('Heartbeat Routes', () => {
     });
 
     it('should reject heartbeat with invalid timestamp', async () => {
+        const timestamp = getCurrentTimestamp();
+        const nonce = generateNonce();
+        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce);
+
         const response = await fastify.inject({
             method: 'POST',
             url: '/heartbeat',
             headers: {
-                authorization: `Bearer ${testApiKey}`,
+                authorization: `Bearer ${signature}`,
+                'x-timestamp': timestamp,
+                'x-nonce': nonce,
             },
             payload: {
                 connection_state: 'up',
@@ -68,11 +97,17 @@ describe('Heartbeat Routes', () => {
     });
 
     it('should reject heartbeat with missing required fields', async () => {
+        const timestamp = getCurrentTimestamp();
+        const nonce = generateNonce();
+        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce);
+
         const response = await fastify.inject({
             method: 'POST',
             url: '/heartbeat',
             headers: {
-                authorization: `Bearer ${testApiKey}`,
+                authorization: `Bearer ${signature}`,
+                'x-timestamp': timestamp,
+                'x-nonce': nonce,
             },
             payload: {
                 connection_state: 'up',
@@ -82,12 +117,20 @@ describe('Heartbeat Routes', () => {
         assert.strictEqual(response.statusCode, 400);
     });
 
-    it.skip('should accept heartbeat with new payload format and token in body (requires DB)', async () => {
+    it.skip('should accept heartbeat with new payload format (requires DB)', async () => {
+        const timestamp = getCurrentTimestamp();
+        const nonce = generateNonce();
+        const signature = computeHmac('POST', '/heartbeat', timestamp, nonce);
+
         const response = await fastify.inject({
             method: 'POST',
             url: '/heartbeat',
+            headers: {
+                authorization: `Bearer ${signature}`,
+                'x-timestamp': timestamp,
+                'x-nonce': nonce,
+            },
             payload: {
-                token: testApiKey,
                 connection_state: 'up',
                 timestamp: new Date().toISOString(),
                 ipv4: '192.168.1.1',

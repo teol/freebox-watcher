@@ -1,32 +1,47 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { type FastifyReply, type FastifyRequest, type HookHandlerDoneFunction } from 'fastify';
 
 /**
- * Minimum API key length for security
+ * Minimum API secret length for security
  */
-const MIN_API_KEY_LENGTH = 16;
+const MIN_API_SECRET_LENGTH = 32;
 
 /**
- * Validates a token against the API key using constant-time comparison
- * to prevent timing attacks
- * @param token The token to validate
- * @param apiKey The expected API key
- * @returns true if the token is valid, false otherwise
+ * Maximum age of a request timestamp in seconds (5 minutes)
  */
-function isValidToken(token: string | undefined, apiKey: string): boolean {
-    if (!token) {
+const MAX_TIMESTAMP_AGE = 300;
+
+/**
+ * Computes HMAC-SHA256 signature for the given message
+ * @param message The message to sign
+ * @param secret The secret key
+ * @returns The HMAC signature in hexadecimal format
+ */
+function computeHmac(message: string, secret: string): string {
+    return createHmac('sha256', secret).update(message).digest('hex');
+}
+
+/**
+ * Validates an HMAC signature using constant-time comparison
+ * @param signature The signature to validate
+ * @param expectedSignature The expected signature
+ * @returns true if signatures match, false otherwise
+ */
+function validateSignature(signature: string, expectedSignature: string): boolean {
+    if (!signature || !expectedSignature) {
         return false;
     }
 
-    const tokenBuffer = Buffer.from(token);
-    const apiKeyBuffer = Buffer.from(apiKey);
+    // Convert to buffers for constant-time comparison
+    const signatureBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expectedSignature);
 
-    // Check lengths match before calling timingSafeEqual (required by the API)
-    if (tokenBuffer.length !== apiKeyBuffer.length) {
+    // Lengths must match for timingSafeEqual
+    if (signatureBuffer.length !== expectedBuffer.length) {
         return false;
     }
 
-    return timingSafeEqual(tokenBuffer, apiKeyBuffer);
+    return timingSafeEqual(signatureBuffer, expectedBuffer);
 }
 
 /**
@@ -46,49 +61,82 @@ function extractBearerToken(authHeader: string | undefined): string | undefined 
 }
 
 /**
- * Authentication middleware using Bearer token authentication
+ * Validates a timestamp to ensure it's not too old
+ * @param timestamp Unix timestamp in seconds
+ * @returns true if timestamp is valid and recent, false otherwise
+ */
+function isValidTimestamp(timestamp: number): boolean {
+    const now = Math.floor(Date.now() / 1000);
+    const age = Math.abs(now - timestamp);
+
+    // Reject if timestamp is more than MAX_TIMESTAMP_AGE seconds old
+    // Also reject if timestamp is in the future (with small tolerance)
+    return age <= MAX_TIMESTAMP_AGE && timestamp <= now + 60;
+}
+
+/**
+ * Builds the canonical message for HMAC signature
+ * Format: METHOD:PATH:TIMESTAMP:NONCE
+ * @param method HTTP method (GET, POST, etc.)
+ * @param path Request path
+ * @param timestamp Unix timestamp
+ * @param nonce Random nonce
+ * @returns The canonical message string
+ */
+function buildCanonicalMessage(
+    method: string,
+    path: string,
+    timestamp: string,
+    nonce: string
+): string {
+    return `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
+}
+
+/**
+ * Authentication middleware using HMAC-based authentication
  *
- * Authenticates requests using the Authorization header with Bearer token scheme.
- * Format: Authorization: Bearer <token>
+ * Authenticates requests using HMAC-SHA256 signatures with the following headers:
+ * - Authorization: Bearer <hmac_signature>
+ * - X-Timestamp: <unix_timestamp>
+ * - X-Nonce: <random_string>
  *
- * For backward compatibility, also supports token in request body (deprecated).
+ * The HMAC signature is computed over: METHOD:PATH:TIMESTAMP:NONCE
  */
 export function authMiddleware(
     request: FastifyRequest,
     reply: FastifyReply,
     done: HookHandlerDoneFunction
 ): void {
-    const apiKey = process.env.API_KEY;
+    const apiSecret = process.env.API_SECRET?.trim();
 
-    // Validate API key configuration
-    if (!apiKey || apiKey.trim().length === 0) {
+    // Validate API secret configuration
+    if (!apiSecret || apiSecret.length === 0) {
         void reply.code(500).send({
             error: 'Internal Server Error',
-            message: 'API key not configured',
+            message: 'API secret not configured',
         });
         return;
     }
 
-    // Validate API key meets minimum security requirements
-    if (apiKey.length < MIN_API_KEY_LENGTH) {
+    // Validate API secret meets minimum security requirements
+    if (apiSecret.length < MIN_API_SECRET_LENGTH) {
         void reply.code(500).send({
             error: 'Internal Server Error',
-            message: `API key must be at least ${MIN_API_KEY_LENGTH} characters`,
+            message: `API secret must be at least ${MIN_API_SECRET_LENGTH} characters`,
         });
         return;
     }
 
-    // PRIMARY: Check Authorization header with Bearer token (recommended)
+    // Extract required headers
     const authHeader = request.headers.authorization;
-    const bearerToken = extractBearerToken(authHeader);
+    const timestampHeader = request.headers['x-timestamp'] as string | undefined;
+    const nonceHeader = request.headers['x-nonce'] as string | undefined;
 
-    if (bearerToken) {
-        if (isValidToken(bearerToken, apiKey)) {
-            done();
-            return;
-        }
+    // Extract signature from Authorization header
+    const signature = extractBearerToken(authHeader);
 
-        // Generic error message - don't reveal why authentication failed
+    // Validate all required components are present
+    if (!signature || !timestampHeader || !nonceHeader) {
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication failed',
@@ -96,16 +144,9 @@ export function authMiddleware(
         return;
     }
 
-    // FALLBACK: Check for token in request body (deprecated, for backward compatibility)
-    const bodyToken = (request.body as { token?: string })?.token;
-
-    if (bodyToken) {
-        if (isValidToken(bodyToken, apiKey)) {
-            done();
-            return;
-        }
-
-        // Generic error message - don't reveal why authentication failed
+    // Parse and validate timestamp
+    const timestamp = Number.parseInt(timestampHeader, 10);
+    if (Number.isNaN(timestamp) || !isValidTimestamp(timestamp)) {
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication failed',
@@ -113,9 +154,35 @@ export function authMiddleware(
         return;
     }
 
-    // No valid authentication provided - use same generic message
-    void reply.code(401).send({
-        error: 'Unauthorized',
-        message: 'Authentication failed',
-    });
+    // Validate nonce (must be non-empty)
+    if (nonceHeader.trim().length === 0) {
+        void reply.code(401).send({
+            error: 'Unauthorized',
+            message: 'Authentication failed',
+        });
+        return;
+    }
+
+    // Build canonical message
+    const canonicalMessage = buildCanonicalMessage(
+        request.method,
+        request.url,
+        timestampHeader,
+        nonceHeader
+    );
+
+    // Compute expected HMAC signature
+    const expectedSignature = computeHmac(canonicalMessage, apiSecret);
+
+    // Validate signature using constant-time comparison
+    if (!validateSignature(signature, expectedSignature)) {
+        void reply.code(401).send({
+            error: 'Unauthorized',
+            message: 'Authentication failed',
+        });
+        return;
+    }
+
+    // Authentication successful
+    done();
 }

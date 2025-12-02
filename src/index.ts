@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import Fastify, { type FastifyInstance } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { testConnection, closeConnection } from './db/config.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
 import { NotificationService } from './services/notification.js';
@@ -11,6 +12,18 @@ import { logger } from './utils/logger.js';
  */
 const fastify: FastifyInstance = Fastify({
     logger: logger,
+});
+
+/**
+ * Register rate limiting (5 requests per minute)
+ */
+await fastify.register(rateLimit, {
+    max: 5,
+    timeWindow: '1 minute',
+    errorResponseBuilder: () => ({
+        error: 'Too Many Requests',
+        message: 'Rate limit exceeded',
+    }),
 });
 
 /**
@@ -38,8 +51,8 @@ async function registerRoutes(): Promise<void> {
 async function start(): Promise<void> {
     try {
         // Validate required environment variables
-        if (!process.env.API_KEY) {
-            throw new Error('API_KEY environment variable is required');
+        if (!process.env.API_SECRET) {
+            throw new Error('API_SECRET environment variable is required');
         }
 
         // Test database connection

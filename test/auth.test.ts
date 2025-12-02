@@ -1,16 +1,39 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { createHmac, randomBytes } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { authMiddleware } from '../src/middleware/auth.js';
 
-describe('Authentication Middleware', () => {
+describe('HMAC Authentication Middleware', () => {
     let fastify: FastifyInstance;
-    const VALID_API_KEY = 'test-api-key-12345';
+    const VALID_API_SECRET = 'test-api-secret-32-characters-long-for-hmac';
     const GENERIC_ERROR_MESSAGE = 'Authentication failed';
+
+    /**
+     * Helper function to compute HMAC signature
+     */
+    function computeHmac(method: string, path: string, timestamp: string, nonce: string): string {
+        const message = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
+        return createHmac('sha256', VALID_API_SECRET).update(message).digest('hex');
+    }
+
+    /**
+     * Helper function to get current Unix timestamp
+     */
+    function getCurrentTimestamp(): string {
+        return Math.floor(Date.now() / 1000).toString();
+    }
+
+    /**
+     * Helper function to generate a random nonce
+     */
+    function generateNonce(): string {
+        return randomBytes(16).toString('hex');
+    }
 
     before(async () => {
         // Set up test environment
-        process.env.API_KEY = VALID_API_KEY;
+        process.env.API_SECRET = VALID_API_SECRET;
 
         fastify = Fastify({ logger: false });
 
@@ -30,25 +53,17 @@ describe('Authentication Middleware', () => {
         await fastify.close();
     });
 
-    describe('Authorization Header', () => {
+    describe('HMAC Signature Validation', () => {
         it('should reject requests without Authorization header', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-            });
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
 
-            assert.strictEqual(response.statusCode, 401);
-            const body = JSON.parse(response.body) as { error: string; message: string };
-            assert.strictEqual(body.error, 'Unauthorized');
-            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
-        });
-
-        it('should reject requests with invalid Authorization header format', async () => {
             const response = await fastify.inject({
                 method: 'GET',
                 url: '/test-protected',
                 headers: {
-                    authorization: 'InvalidFormat token',
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
                 },
             });
 
@@ -58,12 +73,16 @@ describe('Authentication Middleware', () => {
             assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
         });
 
-        it('should reject requests with invalid API key', async () => {
+        it('should reject requests without X-Timestamp header', async () => {
+            const nonce = generateNonce();
+            const signature = 'fake-signature';
+
             const response = await fastify.inject({
                 method: 'GET',
                 url: '/test-protected',
                 headers: {
-                    authorization: 'Bearer wrong-api-key',
+                    authorization: `Bearer ${signature}`,
+                    'x-nonce': nonce,
                 },
             });
 
@@ -73,68 +92,16 @@ describe('Authentication Middleware', () => {
             assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
         });
 
-        it('should accept requests with valid API key in Authorization header', async () => {
+        it('should reject requests without X-Nonce header', async () => {
+            const timestamp = getCurrentTimestamp();
+            const signature = 'fake-signature';
+
             const response = await fastify.inject({
                 method: 'GET',
                 url: '/test-protected',
                 headers: {
-                    authorization: `Bearer ${VALID_API_KEY}`,
-                },
-            });
-
-            assert.strictEqual(response.statusCode, 200);
-            const body = JSON.parse(response.body) as { message: string };
-            assert.strictEqual(body.message, 'success');
-        });
-
-        it('should accept requests with Bearer scheme in lowercase', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: `bearer ${VALID_API_KEY}`,
-                },
-            });
-
-            assert.strictEqual(response.statusCode, 200);
-            const body = JSON.parse(response.body) as { message: string };
-            assert.strictEqual(body.message, 'success');
-        });
-
-        it('should accept requests with Bearer scheme in mixed case', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: `BeArEr ${VALID_API_KEY}`,
-                },
-            });
-
-            assert.strictEqual(response.statusCode, 200);
-            const body = JSON.parse(response.body) as { message: string };
-            assert.strictEqual(body.message, 'success');
-        });
-
-        it('should accept requests with multiple spaces between Bearer and token', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: `Bearer    ${VALID_API_KEY}`,
-                },
-            });
-
-            assert.strictEqual(response.statusCode, 200);
-            const body = JSON.parse(response.body) as { message: string };
-            assert.strictEqual(body.message, 'success');
-        });
-
-        it('should reject requests with empty token', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: 'Bearer ',
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
                 },
             });
 
@@ -144,165 +111,321 @@ describe('Authentication Middleware', () => {
             assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
         });
 
-        it('should reject requests with only Bearer keyword', async () => {
+        it('should reject requests with invalid signature', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            const signature = 'invalid-signature-that-wont-match';
+
             const response = await fastify.inject({
                 method: 'GET',
                 url: '/test-protected',
                 headers: {
-                    authorization: 'Bearer',
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
                 },
             });
 
             assert.strictEqual(response.statusCode, 401);
             const body = JSON.parse(response.body) as { error: string; message: string };
             assert.strictEqual(body.error, 'Unauthorized');
+            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
+        });
+
+        it('should accept requests with valid HMAC signature', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 200);
+            const body = JSON.parse(response.body) as { message: string };
+            assert.strictEqual(body.message, 'success');
+        });
+
+        it('should accept POST requests with valid HMAC signature', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            const signature = computeHmac('POST', '/test-post-protected', timestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'POST',
+                url: '/test-post-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
+                },
+                payload: {
+                    data: 'some data',
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 200);
+            const body = JSON.parse(response.body) as { message: string };
+            assert.strictEqual(body.message, 'success');
+        });
+
+        it('should reject signature for wrong HTTP method', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            // Generate signature for POST but send GET
+            const signature = computeHmac('POST', '/test-protected', timestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 401);
+            const body = JSON.parse(response.body) as { error: string; message: string };
+            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
+        });
+
+        it('should reject signature for wrong path', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            // Generate signature for different path
+            const signature = computeHmac('GET', '/wrong-path', timestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 401);
+            const body = JSON.parse(response.body) as { error: string; message: string };
             assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
         });
     });
 
-    describe('Body Token (Deprecated)', () => {
-        it('should accept POST requests with valid token in body', async () => {
-            const response = await fastify.inject({
-                method: 'POST',
-                url: '/test-post-protected',
-                payload: {
-                    token: VALID_API_KEY,
-                    data: 'some data',
-                },
-            });
+    describe('Timestamp Validation', () => {
+        it('should reject expired timestamp (older than 5 minutes)', async () => {
+            const nonce = generateNonce();
+            const expiredTimestamp = (Math.floor(Date.now() / 1000) - 400).toString(); // 6min 40s ago
+            const signature = computeHmac('GET', '/test-protected', expiredTimestamp, nonce);
 
-            assert.strictEqual(response.statusCode, 200);
-            const body = JSON.parse(response.body) as { message: string };
-            assert.strictEqual(body.message, 'success');
-        });
-
-        it('should reject POST requests with invalid token in body', async () => {
             const response = await fastify.inject({
-                method: 'POST',
-                url: '/test-post-protected',
-                payload: {
-                    token: 'wrong-api-key',
-                    data: 'some data',
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': expiredTimestamp,
+                    'x-nonce': nonce,
                 },
             });
 
             assert.strictEqual(response.statusCode, 401);
             const body = JSON.parse(response.body) as { error: string; message: string };
-            assert.strictEqual(body.error, 'Unauthorized');
             assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
         });
 
-        it('should prioritize Authorization header over body token', async () => {
+        it('should reject future timestamp (more than 1 minute ahead)', async () => {
+            const nonce = generateNonce();
+            const futureTimestamp = (Math.floor(Date.now() / 1000) + 120).toString(); // 2 minutes in future
+            const signature = computeHmac('GET', '/test-protected', futureTimestamp, nonce);
+
             const response = await fastify.inject({
-                method: 'POST',
-                url: '/test-post-protected',
+                method: 'GET',
+                url: '/test-protected',
                 headers: {
-                    authorization: `Bearer ${VALID_API_KEY}`,
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': futureTimestamp,
+                    'x-nonce': nonce,
                 },
-                payload: {
-                    token: 'wrong-token-in-body',
-                    data: 'some data',
+            });
+
+            assert.strictEqual(response.statusCode, 401);
+            const body = JSON.parse(response.body) as { error: string; message: string };
+            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
+        });
+
+        it('should reject invalid timestamp format', async () => {
+            const nonce = generateNonce();
+            const invalidTimestamp = 'not-a-timestamp';
+            const signature = computeHmac('GET', '/test-protected', invalidTimestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': invalidTimestamp,
+                    'x-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 401);
+            const body = JSON.parse(response.body) as { error: string; message: string };
+            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
+        });
+
+        it('should accept timestamp within valid window', async () => {
+            const nonce = generateNonce();
+            const timestamp = getCurrentTimestamp();
+            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
                 },
             });
 
             assert.strictEqual(response.statusCode, 200);
-            const body = JSON.parse(response.body) as { message: string };
-            assert.strictEqual(body.message, 'success');
         });
     });
 
-    describe('Timing-Safe Comparison', () => {
-        it('should use constant-time comparison for tokens', async () => {
-            // Test with tokens of same length but different content
-            const startTime1 = Date.now();
-            await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: 'Bearer aaaaa-api-key-12345',
-                },
-            });
-            const duration1 = Date.now() - startTime1;
+    describe('Nonce Validation', () => {
+        it('should reject empty nonce', async () => {
+            const timestamp = getCurrentTimestamp();
+            const emptyNonce = '';
+            const signature = computeHmac('GET', '/test-protected', timestamp, emptyNonce);
 
-            const startTime2 = Date.now();
-            await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: 'Bearer zzzzz-api-key-12345',
-                },
-            });
-            const duration2 = Date.now() - startTime2;
-
-            // Both should fail with same error message
-            // Note: We can't reliably test timing in unit tests, but we verify same behavior
-            assert.ok(true, 'Timing-safe comparison is implemented');
-        });
-
-        it('should reject tokens of different lengths safely', async () => {
             const response = await fastify.inject({
                 method: 'GET',
                 url: '/test-protected',
                 headers: {
-                    authorization: 'Bearer short',
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': emptyNonce,
                 },
             });
 
             assert.strictEqual(response.statusCode, 401);
             const body = JSON.parse(response.body) as { error: string; message: string };
-            assert.strictEqual(body.error, 'Unauthorized');
             assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
+        });
+
+        it('should reject whitespace-only nonce', async () => {
+            const timestamp = getCurrentTimestamp();
+            const whitespaceNonce = '   ';
+            const signature = computeHmac('GET', '/test-protected', timestamp, whitespaceNonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': whitespaceNonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 401);
+            const body = JSON.parse(response.body) as { error: string; message: string };
+            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
+        });
+
+        it('should accept valid nonce', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 200);
+        });
+    });
+
+    describe('Bearer Scheme Compatibility', () => {
+        it('should accept Bearer scheme in lowercase', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `bearer ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 200);
+        });
+
+        it('should accept Bearer scheme with multiple spaces', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
+            const signature = computeHmac('GET', '/test-protected', timestamp, nonce);
+
+            const response = await fastify.inject({
+                method: 'GET',
+                url: '/test-protected',
+                headers: {
+                    authorization: `Bearer    ${signature}`,
+                    'x-timestamp': timestamp,
+                    'x-nonce': nonce,
+                },
+            });
+
+            assert.strictEqual(response.statusCode, 200);
         });
     });
 
     describe('Error Message Consistency', () => {
-        it('should return same error message for missing auth', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-            });
+        it('should return same error message for all failure cases', async () => {
+            const timestamp = getCurrentTimestamp();
+            const nonce = generateNonce();
 
-            const body = JSON.parse(response.body) as { error: string; message: string };
-            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
-        });
+            // Test various failure scenarios
+            const testCases = [
+                { headers: {} }, // Missing all headers
+                { headers: { authorization: 'Bearer fake' } }, // Missing timestamp & nonce
+                { headers: { authorization: 'Bearer fake', 'x-timestamp': timestamp } }, // Missing nonce
+                {
+                    headers: {
+                        authorization: 'Bearer wrong',
+                        'x-timestamp': timestamp,
+                        'x-nonce': nonce,
+                    },
+                }, // Wrong signature
+            ];
 
-        it('should return same error message for invalid format', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: 'Invalid format',
-                },
-            });
+            for (const testCase of testCases) {
+                const response = await fastify.inject({
+                    method: 'GET',
+                    url: '/test-protected',
+                    headers: testCase.headers,
+                });
 
-            const body = JSON.parse(response.body) as { error: string; message: string };
-            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
-        });
-
-        it('should return same error message for wrong token', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: 'Bearer wrong-token',
-                },
-            });
-
-            const body = JSON.parse(response.body) as { error: string; message: string };
-            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
-        });
-
-        it('should return same error message for empty token', async () => {
-            const response = await fastify.inject({
-                method: 'GET',
-                url: '/test-protected',
-                headers: {
-                    authorization: 'Bearer ',
-                },
-            });
-
-            const body = JSON.parse(response.body) as { error: string; message: string };
-            assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
+                assert.strictEqual(response.statusCode, 401);
+                const body = JSON.parse(response.body) as { error: string; message: string };
+                assert.strictEqual(body.message, GENERIC_ERROR_MESSAGE);
+            }
         });
     });
 });

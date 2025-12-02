@@ -9,7 +9,8 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 ## Features
 
 - 📡 HTTP heartbeat endpoint for receiving status updates
-- 🔒 Secure Bearer token authentication with timing-attack protection
+- 🔒 Secure HMAC-SHA256 authentication with timing-attack protection and replay prevention
+- 🛡️ Rate limiting (5 requests per minute)
 - 📊 MariaDB storage for heartbeat history
 - 🔔 Automatic downtime detection (5 minutes without heartbeat)
 - 📲 Telegram notifications for downtime alerts and recovery
@@ -99,7 +100,7 @@ Create a `.env` file in the project root with the following variables:
 # Server Configuration
 PORT=3001
 HOST=127.0.0.1
-API_KEY=your-secure-api-key-here
+API_SECRET=your-secure-api-secret-here
 
 # Database Configuration
 DB_HOST=localhost
@@ -125,7 +126,7 @@ TELEGRAM_CHAT_ID=your-telegram-chat-id
 
 - `PORT`: Port number for the API server (default: 3001)
 - `HOST`: Network interface for the API server (default: 127.0.0.1 for local-only access)
-- `API_KEY`: Authentication key for securing the heartbeat endpoint (minimum 16 characters)
+- `API_SECRET`: HMAC secret for authenticating API requests (minimum 32 characters required)
 - `DB_HOST`: MariaDB host address
 - `DB_PORT`: MariaDB port (default: 3306)
 - `DB_USER`: Database user
@@ -137,30 +138,6 @@ TELEGRAM_CHAT_ID=your-telegram-chat-id
 - `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
-
-### Generating a Secure API Key
-
-The API key must be at least 16 characters long. Generate a secure random key using one of these methods:
-
-**Using OpenSSL (Linux/macOS):**
-
-```bash
-openssl rand -base64 32
-```
-
-**Using Node.js (any platform):**
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-**Example output:**
-
-```
-xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=
-```
-
-Copy the generated key and set it as the `API_KEY` value in your `.env` file.
 
 ## Database Schema
 
@@ -177,103 +154,269 @@ yarn db:migrate
 
 ## API Authentication
 
-The API uses **Bearer token authentication** for securing all endpoints. All requests must include an `Authorization` header with a valid API token.
+The API uses **HMAC-SHA256 signature** authentication for maximum security. Each request is signed with a shared secret and includes a timestamp to prevent replay attacks.
 
-### Authentication Header Format
+### Rate Limiting
 
-```
-Authorization: Bearer <your-api-key>
-```
+The API is rate-limited to **5 requests per minute** per IP address. If you exceed this limit, you'll receive a `429 Too Many Requests` error.
 
-### How Clients Should Authenticate
+### Generating a Secure API Secret
 
-All API requests must include the Bearer token in the `Authorization` header. The token value is the same as the `API_KEY` configured in your `.env` file.
+The API secret must be at least 32 characters long. Generate a secure random secret:
 
-#### Example with cURL
+**Using OpenSSL (Linux/macOS):**
 
 ```bash
-curl -X POST https://monitor.example.com/heartbeat \
-  -H "Authorization: Bearer xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=" \
+openssl rand -base64 48
+```
+
+**Using Node.js (any platform):**
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+```
+
+**Example output:**
+
+```
+vK2pL9xW7mR4nQ8tY3zB6cD5eF1gH0jS4kN7mL2pO9qR5tW8yA3bC6dE9fG=
+```
+
+Copy the generated secret and set it as `API_SECRET` in your `.env` file on the server.
+
+### How HMAC Authentication Works
+
+1. **Client** has the shared secret (`API_SECRET`)
+2. **Client** generates current Unix timestamp (seconds)
+3. **Client** generates a random nonce (unique per request)
+4. **Client** builds canonical message: `METHOD:PATH:TIMESTAMP:NONCE`
+5. **Client** computes HMAC-SHA256 signature of the canonical message
+6. **Client** sends request with 3 headers:
+    - `Authorization: Bearer <hmac_signature>`
+    - `X-Timestamp: <unix_timestamp>`
+    - `X-Nonce: <random_string>`
+7. **Server** reconstructs the canonical message and verifies the signature
+8. **Server** checks timestamp is not expired (max 5 minutes old)
+
+### Required Headers
+
+All API requests must include these three headers:
+
+```
+Authorization: Bearer <hmac_signature_in_hex>
+X-Timestamp: <unix_timestamp_in_seconds>
+X-Nonce: <random_string>
+```
+
+### Canonical Message Format
+
+The message to sign must be constructed exactly as:
+
+```
+METHOD:PATH:TIMESTAMP:NONCE
+```
+
+**Example:**
+
+```
+POST:/heartbeat:1704567890:a1b2c3d4e5f6
+```
+
+**Important:**
+
+- `METHOD` must be uppercase (GET, POST, etc.)
+- `PATH` is the full request path including query string
+- `TIMESTAMP` is Unix timestamp in seconds (integer)
+- `NONCE` can be any non-empty random string (recommended: 16+ random bytes in hex)
+
+### Client Implementation Examples
+
+#### JavaScript/TypeScript (Node.js)
+
+```javascript
+import { createHmac, randomBytes } from 'crypto';
+
+const API_SECRET = process.env.API_SECRET;
+const API_URL = 'https://monitor.example.com';
+
+function makeAuthenticatedRequest(method, path, body = null) {
+    // Generate timestamp and nonce
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const nonce = randomBytes(16).toString('hex');
+
+    // Build canonical message
+    const canonicalMessage = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}`;
+
+    // Compute HMAC signature
+    const signature = createHmac('sha256', API_SECRET).update(canonicalMessage).digest('hex');
+
+    // Make request
+    return fetch(`${API_URL}${path}`, {
+        method: method,
+        headers: {
+            Authorization: `Bearer ${signature}`,
+            'X-Timestamp': timestamp,
+            'X-Nonce': nonce,
+            'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : null,
+    });
+}
+
+// Example usage
+await makeAuthenticatedRequest('POST', '/heartbeat', {
+    connection_state: 'up',
+    timestamp: new Date().toISOString(),
+});
+```
+
+#### Python
+
+```python
+import os
+import time
+import hmac
+import hashlib
+import secrets
+import requests
+
+API_SECRET = os.getenv('API_SECRET').encode('utf-8')
+API_URL = 'https://monitor.example.com'
+
+def make_authenticated_request(method, path, body=None):
+    # Generate timestamp and nonce
+    timestamp = str(int(time.time()))
+    nonce = secrets.token_hex(16)
+
+    # Build canonical message
+    canonical_message = f"{method.upper()}:{path}:{timestamp}:{nonce}"
+
+    # Compute HMAC signature
+    signature = hmac.new(
+        API_SECRET,
+        canonical_message.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+
+    # Make request
+    headers = {
+        'Authorization': f'Bearer {signature}',
+        'X-Timestamp': timestamp,
+        'X-Nonce': nonce,
+        'Content-Type': 'application/json'
+    }
+
+    return requests.request(
+        method=method,
+        url=f"{API_URL}{path}",
+        headers=headers,
+        json=body
+    )
+
+# Example usage
+make_authenticated_request('POST', '/heartbeat', {
+    'connection_state': 'up',
+    'timestamp': '2025-01-15T10:30:00.000Z'
+})
+```
+
+#### Bash/cURL
+
+```bash
+#!/bin/bash
+
+API_SECRET="your-api-secret-here"
+API_URL="https://monitor.example.com"
+METHOD="POST"
+PATH="/heartbeat"
+
+# Generate timestamp and nonce
+TIMESTAMP=$(date +%s)
+NONCE=$(openssl rand -hex 16)
+
+# Build canonical message
+CANONICAL_MESSAGE="${METHOD}:${PATH}:${TIMESTAMP}:${NONCE}"
+
+# Compute HMAC signature
+SIGNATURE=$(echo -n "$CANONICAL_MESSAGE" | openssl dgst -sha256 -hmac "$API_SECRET" | awk '{print $2}')
+
+# Make request
+curl -X "$METHOD" "${API_URL}${PATH}" \
+  -H "Authorization: Bearer $SIGNATURE" \
+  -H "X-Timestamp: $TIMESTAMP" \
+  -H "X-Nonce: $NONCE" \
   -H "Content-Type: application/json" \
   -d '{
     "connection_state": "up",
-    "timestamp": "2025-01-15T10:30:00.000Z",
-    "ipv4": "192.168.1.100"
+    "timestamp": "2025-01-15T10:30:00.000Z"
   }'
 ```
 
-#### Example with JavaScript/TypeScript (fetch)
+#### Go
 
-```javascript
-const response = await fetch('https://monitor.example.com/heartbeat', {
-    method: 'POST',
-    headers: {
-        Authorization: 'Bearer xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=',
-        'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-        connection_state: 'up',
-        timestamp: new Date().toISOString(),
-        ipv4: '192.168.1.100',
-    }),
-});
+```go
+package main
 
-const data = await response.json();
-console.log(data);
-```
-
-#### Example with Node.js (axios)
-
-```javascript
-const axios = require('axios');
-
-const response = await axios.post(
-    'https://monitor.example.com/heartbeat',
-    {
-        connection_state: 'up',
-        timestamp: new Date().toISOString(),
-        ipv4: '192.168.1.100',
-    },
-    {
-        headers: {
-            Authorization: 'Bearer xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=',
-        },
-    }
-);
-
-console.log(response.data);
-```
-
-#### Example with Python (requests)
-
-```python
-import requests
-from datetime import datetime
-
-response = requests.post(
-    'https://monitor.example.com/heartbeat',
-    headers={
-        'Authorization': 'Bearer xK9mP2vL8nR4tQ6wY1zB5cA7dF3gH0jS9kN8mL6pO4qR=',
-        'Content-Type': 'application/json'
-    },
-    json={
-        'connection_state': 'up',
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'ipv4': '192.168.1.100'
-    }
+import (
+    "crypto/hmac"
+    "crypto/rand"
+    "crypto/sha256"
+    "encoding/hex"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "strings"
+    "time"
 )
 
-print(response.json())
+func generateNonce() string {
+    bytes := make([]byte, 16)
+    rand.Read(bytes)
+    return hex.EncodeToString(bytes)
+}
+
+func computeSignature(method, path, timestamp, nonce, secret string) string {
+    message := fmt.Sprintf("%s:%s:%s:%s", strings.ToUpper(method), path, timestamp, nonce)
+    mac := hmac.New(sha256.New, []byte(secret))
+    mac.Write([]byte(message))
+    return hex.EncodeToString(mac.Sum(nil))
+}
+
+func makeAuthenticatedRequest(method, path, body string) (*http.Response, error) {
+    apiSecret := os.Getenv("API_SECRET")
+    apiURL := "https://monitor.example.com"
+
+    // Generate timestamp and nonce
+    timestamp := fmt.Sprintf("%d", time.Now().Unix())
+    nonce := generateNonce()
+
+    // Compute signature
+    signature := computeSignature(method, path, timestamp, nonce, apiSecret)
+
+    // Create request
+    req, err := http.NewRequest(method, apiURL+path, strings.NewReader(body))
+    if err != nil {
+        return nil, err
+    }
+
+    // Add headers
+    req.Header.Set("Authorization", "Bearer "+signature)
+    req.Header.Set("X-Timestamp", timestamp)
+    req.Header.Set("X-Nonce", nonce)
+    req.Header.Set("Content-Type", "application/json")
+
+    // Send request
+    client := &http.Client{}
+    return client.Do(req)
+}
 ```
 
 ### Authentication Error Responses
 
-The API returns HTTP status codes for authentication failures:
+All authentication failures return the same generic error to prevent information leakage:
 
-- **401 Unauthorized**: Authentication failed (missing, invalid, or malformed credentials)
-- **500 Internal Server Error**: API key not configured on the server
-
-For security reasons, all authentication failures return the same generic error response:
+**401 Unauthorized:**
 
 ```json
 {
@@ -282,53 +425,78 @@ For security reasons, all authentication failures return the same generic error 
 }
 ```
 
-This prevents potential attackers from determining whether:
+**429 Too Many Requests:**
 
-- The authentication header is missing
-- The token format is invalid
-- The token value is incorrect
+```json
+{
+    "error": "Too Many Requests",
+    "message": "Rate limit exceeded"
+}
+```
 
-### Client Configuration Guide
+**500 Internal Server Error:**
 
-To authenticate your client application:
+```json
+{
+    "error": "Internal Server Error",
+    "message": "API secret not configured"
+}
+```
 
-1. **Generate a secure API key** (minimum 16 characters):
+### Security Features
 
-    ```bash
-    openssl rand -base64 32
-    # or
-    node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-    ```
-
-2. **Configure the key on the server** in your `.env` file:
-
-    ```env
-    API_KEY=your-generated-key-here
-    ```
-
-3. **Add the key to your client application**:
-    - Store it in environment variables (recommended)
-    - Never hardcode it in your source code
-    - Example: `API_KEY=your-generated-key-here` in client's `.env`
-
-4. **Use the key in all API requests**:
-    - Add header: `Authorization: Bearer <your-api-key>`
-    - The scheme name "Bearer" is case-insensitive (Bearer, bearer, BEARER all work)
-    - Multiple spaces between "Bearer" and the token are supported
+1. **✅ HMAC-SHA256**: Cryptographically secure signature scheme
+2. **✅ Timing-safe comparison**: Prevents timing attacks on signature validation
+3. **✅ Timestamp expiration**: Requests expire after 5 minutes (prevents old replay attacks)
+4. **✅ Nonce requirement**: Random nonce per request (prevents replay attacks within time window)
+5. **✅ Generic error messages**: All auth failures return same message (prevents information leakage)
+6. **✅ Rate limiting**: 5 requests/minute prevents brute-force attacks
+7. **✅ Secret never transmitted**: API secret stays on client and server, never sent over network
+8. **✅ Request-specific signatures**: Signature changes for different methods, paths, or times
 
 ### Security Best Practices
 
-1. **Keep your API key secret**: Never commit your `.env` file or expose the API key in public repositories
-2. **Use HTTPS in production**: Always use a reverse proxy (Caddy/Nginx) with SSL/TLS certificates
-3. **Rotate keys periodically**: Generate a new API key every few months for enhanced security
-4. **Use environment variables**: Never hardcode API keys in your application code
-5. **Minimum key length**: Ensure your API key is at least 16 characters long (32+ recommended)
-6. **Monitor for unauthorized access**: Check logs regularly for 401 errors that might indicate attack attempts
-7. **Use the same key on server and client**: The token you send must match the `API_KEY` configured on the server
+1. **Keep your API secret private**: Never commit `.env` files or hardcode secrets in source code
+2. **Use HTTPS in production**: Always use TLS/SSL with a reverse proxy (Caddy/Nginx)
+3. **Rotate secrets periodically**: Generate a new API secret every few months
+4. **Use environment variables**: Store secrets in `.env` files or secure secret management systems
+5. **Minimum secret length**: Ensure API secret is at least 32 characters (48+ recommended)
+6. **Monitor for 401 errors**: Regular 401s might indicate attack attempts
+7. **Synchronize clocks**: Ensure client and server clocks are synchronized (use NTP)
+8. **Generate strong nonces**: Use cryptographically secure random generators
 
-### Backward Compatibility Note
+### Client Configuration Guide
 
-For backward compatibility with older clients, the API also accepts the token in the request body as a `token` field. However, this method is **deprecated** and may be removed in future versions. **Always use the `Authorization: Bearer` header for new implementations.**
+**Server-side (Freebox Watcher):**
+
+1. Generate API secret: `openssl rand -base64 48`
+2. Add to server's `.env`: `API_SECRET=<your-secret>`
+3. Restart server
+
+**Client-side (Freebox Heartbeat or custom client):**
+
+1. Use the **same** API secret from step 1
+2. Add to client's `.env`: `API_SECRET=<same-secret>`
+3. Implement HMAC signature generation (see examples above)
+4. Send requests with all 3 required headers
+
+### Troubleshooting
+
+**"Authentication failed" - Check:**
+
+- API secret matches on client and server
+- Timestamp is current (within 5 minutes)
+- Nonce is non-empty
+- Canonical message format is correct: `METHOD:PATH:TIMESTAMP:NONCE`
+- METHOD is uppercase
+- Signature is hex-encoded
+- All 3 headers are present
+
+**"Rate limit exceeded" - Solution:**
+
+- Wait 1 minute before retrying
+- Reduce request frequency to max 5 per minute
+- Check for loops sending excessive requests
 
 ## Telegram Notifications Setup
 
