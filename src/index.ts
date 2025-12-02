@@ -6,6 +6,7 @@ import { heartbeatRoutes } from './routes/heartbeat.js';
 import { NotificationService } from './services/notification.js';
 import { DowntimeMonitor } from './services/downtimeMonitor.js';
 import { logger } from './utils/logger.js';
+import { API_PREFIX } from './constants/api.js';
 
 /**
  * Create Fastify instance with shared logger
@@ -49,7 +50,7 @@ fastify.decorate('downtimeMonitor', downtimeMonitor);
  * Register routes
  */
 async function registerRoutes(): Promise<void> {
-    await fastify.register(heartbeatRoutes, { prefix: '/api' });
+    await fastify.register(heartbeatRoutes, { prefix: API_PREFIX });
 }
 
 /**

@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { type FastifyReply, type FastifyRequest, type HookHandlerDoneFunction } from 'fastify';
+import { API_PREFIX } from '../constants/api.js';
 
 /**
  * Minimum API secret length for security
@@ -210,12 +211,11 @@ export function authMiddleware(
     const bodyString = request.rawBody || '';
 
     // Build canonical message
-    // Use routerPath to keep signatures stable when the server is mounted under a base prefix
-    const routerPath = (request as FastifyRequest & { routerPath?: string }).routerPath;
-    const hasQueryString = request.url.includes('?');
-    const canonicalPath = routerPath
-        ? `${routerPath}${hasQueryString ? request.url.slice(request.url.indexOf('?')) : ''}`
+    // Strip known API prefix to keep signatures stable even when the server is mounted under a base path
+    const pathWithoutPrefix = request.url.startsWith(API_PREFIX)
+        ? request.url.substring(API_PREFIX.length)
         : request.url;
+    const canonicalPath = pathWithoutPrefix || '/';
 
     const canonicalMessage = buildCanonicalMessage(
         request.method,
