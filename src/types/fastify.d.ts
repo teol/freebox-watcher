@@ -7,4 +7,8 @@ declare module 'fastify' {
         notificationService: NotificationService;
         downtimeMonitor: DowntimeMonitor;
     }
+
+    interface FastifyRequest {
+        rawBody?: string;
+    }
 }
