@@ -151,12 +151,15 @@ export function authMiddleware(
     }
 
     // Extract required headers
-    const authHeader = normalizeHeader(request.headers.authorization as string | string[] | undefined);
-    const timestampHeader = normalizeHeader(request.headers['signature-timestamp'] as
-        | string
-        | string[]
-        | undefined);
-    const nonceHeader = normalizeHeader(request.headers['signature-nonce'] as string | string[] | undefined);
+    const authHeader = normalizeHeader(
+        request.headers.authorization as string | string[] | undefined
+    );
+    const timestampHeader = normalizeHeader(
+        request.headers['signature-timestamp'] as string | string[] | undefined
+    );
+    const nonceHeader = normalizeHeader(
+        request.headers['signature-nonce'] as string | string[] | undefined
+    );
 
     // Validate header types (reject if arrays - multiple values sent)
     if (
