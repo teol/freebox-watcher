@@ -268,28 +268,53 @@ print(response.json())
 
 ### Authentication Error Responses
 
-The API returns specific error codes for authentication failures:
+The API returns HTTP status codes for authentication failures:
 
-- **401 Unauthorized**: Missing or invalid Bearer token
+- **401 Unauthorized**: Authentication failed (missing, invalid, or malformed credentials)
 - **500 Internal Server Error**: API key not configured on the server
 
-#### Missing Authentication
+For security reasons, all authentication failures return the same generic error response:
 
 ```json
 {
     "error": "Unauthorized",
-    "message": "Missing authentication. Use Authorization: Bearer <token> header"
+    "message": "Authentication failed"
 }
 ```
 
-#### Invalid Token
+This prevents potential attackers from determining whether:
 
-```json
-{
-    "error": "Unauthorized",
-    "message": "Invalid API token"
-}
-```
+- The authentication header is missing
+- The token format is invalid
+- The token value is incorrect
+
+### Client Configuration Guide
+
+To authenticate your client application:
+
+1. **Generate a secure API key** (minimum 16 characters):
+
+    ```bash
+    openssl rand -base64 32
+    # or
+    node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+    ```
+
+2. **Configure the key on the server** in your `.env` file:
+
+    ```env
+    API_KEY=your-generated-key-here
+    ```
+
+3. **Add the key to your client application**:
+    - Store it in environment variables (recommended)
+    - Never hardcode it in your source code
+    - Example: `API_KEY=your-generated-key-here` in client's `.env`
+
+4. **Use the key in all API requests**:
+    - Add header: `Authorization: Bearer <your-api-key>`
+    - The scheme name "Bearer" is case-insensitive (Bearer, bearer, BEARER all work)
+    - Multiple spaces between "Bearer" and the token are supported
 
 ### Security Best Practices
 
@@ -298,6 +323,8 @@ The API returns specific error codes for authentication failures:
 3. **Rotate keys periodically**: Generate a new API key every few months for enhanced security
 4. **Use environment variables**: Never hardcode API keys in your application code
 5. **Minimum key length**: Ensure your API key is at least 16 characters long (32+ recommended)
+6. **Monitor for unauthorized access**: Check logs regularly for 401 errors that might indicate attack attempts
+7. **Use the same key on server and client**: The token you send must match the `API_KEY` configured on the server
 
 ### Backward Compatibility Note
 

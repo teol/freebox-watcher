@@ -31,6 +31,7 @@ function isValidToken(token: string | undefined, apiKey: string): boolean {
 
 /**
  * Extracts the Bearer token from the Authorization header
+ * Case-insensitive matching of "Bearer" scheme with support for multiple spaces
  * @param authHeader The Authorization header value
  * @returns The token if valid format, undefined otherwise
  */
@@ -39,12 +40,9 @@ function extractBearerToken(authHeader: string | undefined): string | undefined 
         return undefined;
     }
 
-    const parts = authHeader.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-        return undefined;
-    }
-
-    return parts[1];
+    // Match "Bearer" (case-insensitive) followed by one or more spaces and the token
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    return match ? match[1] : undefined;
 }
 
 /**
@@ -90,9 +88,10 @@ export function authMiddleware(
             return;
         }
 
+        // Generic error message - don't reveal why authentication failed
         void reply.code(401).send({
             error: 'Unauthorized',
-            message: 'Invalid API token',
+            message: 'Authentication failed',
         });
         return;
     }
@@ -106,16 +105,17 @@ export function authMiddleware(
             return;
         }
 
+        // Generic error message - don't reveal why authentication failed
         void reply.code(401).send({
             error: 'Unauthorized',
-            message: 'Invalid API token',
+            message: 'Authentication failed',
         });
         return;
     }
 
-    // No valid authentication provided
+    // No valid authentication provided - use same generic message
     void reply.code(401).send({
         error: 'Unauthorized',
-        message: 'Missing authentication. Use Authorization: Bearer <token> header',
+        message: 'Authentication failed',
     });
 }
