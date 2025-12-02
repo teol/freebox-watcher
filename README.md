@@ -156,6 +156,8 @@ yarn db:migrate
 
 The API uses **HMAC-SHA256 signature** authentication for maximum security. Each request is signed with a shared secret and includes a timestamp to prevent replay attacks.
 
+All HTTP endpoints are mounted under the `/api` base path. For example, the heartbeat endpoint is available at `/api/heartbeat`, but signatures must be generated for the route path without the prefix (e.g., `/heartbeat`).
+
 ### Rate Limiting
 
 The API is rate-limited to **5 requests per minute** per IP address. If you exceed this limit, you'll receive a `429 Too Many Requests` error.
@@ -225,10 +227,12 @@ For a POST request with body `{"connection_state":"up","timestamp":"2025-12-02T1
 method=POST;path=/heartbeat;ts=1733144872;nonce=89af77e23a;body_sha256=rL0Y20zC-Fzt72VPzMSk2A
 ```
 
+The request would be sent to `/api/heartbeat`, but the canonical path used for signing remains `/heartbeat` so that signatures stay stable if the server's base path changes.
+
 **Important:**
 
 - `METHOD` must be uppercase (GET, POST, etc.)
-- `PATH` is the full request path including query string
+- `PATH` is the route path (excluding any base prefix like `/api`) and includes the query string when present
 - `TIMESTAMP` is Unix timestamp in seconds (integer)
 - `NONCE` can be any non-empty random string (recommended: 16+ random bytes in hex)
 - `HASH` is the SHA256 hash of the raw request body, encoded in base64url format (empty string results in hash of empty string for GET requests)
@@ -242,6 +246,7 @@ import { createHash, createHmac, randomBytes } from 'crypto';
 
 const API_SECRET = process.env.API_SECRET as string;
 const API_URL = 'https://monitor.example.com';
+const API_BASE_PATH = '/api';
 
 interface RequestBody {
     [key: string]: unknown;
@@ -249,7 +254,7 @@ interface RequestBody {
 
 async function makeAuthenticatedRequest(
     method: string,
-    path: string,
+    routePath: string,
     body: RequestBody | null = null
 ): Promise<Response> {
     // Generate timestamp and nonce
@@ -263,13 +268,13 @@ async function makeAuthenticatedRequest(
     const bodyHash = createHash('sha256').update(bodyString).digest('base64url');
 
     // Build canonical message
-    const canonicalMessage = `method=${method.toUpperCase()};path=${path};ts=${timestamp};nonce=${nonce};body_sha256=${bodyHash}`;
+    const canonicalMessage = `method=${method.toUpperCase()};path=${routePath};ts=${timestamp};nonce=${nonce};body_sha256=${bodyHash}`;
 
     // Compute HMAC signature
     const signature = createHmac('sha256', API_SECRET).update(canonicalMessage).digest('base64url');
 
     // Make request
-    return fetch(`${API_URL}${path}`, {
+    return fetch(`${API_URL}${API_BASE_PATH}${routePath}`, {
         method: method,
         headers: {
             Authorization: `Bearer ${signature}`,
@@ -309,8 +314,9 @@ import requests
 
 API_SECRET = os.getenv('API_SECRET').encode('utf-8')
 API_URL = 'https://monitor.example.com'
+API_BASE_PATH = '/api'
 
-def make_authenticated_request(method, path, body=None):
+def make_authenticated_request(method, route_path, body=None):
     # Generate timestamp and nonce
     timestamp = str(int(time.time()))
     nonce = secrets.token_hex(16)
@@ -323,7 +329,7 @@ def make_authenticated_request(method, path, body=None):
     body_hash_b64url = base64.urlsafe_b64encode(body_hash).decode('utf-8').rstrip('=')
 
     # Build canonical message
-    canonical_message = f"method={method.upper()};path={path};ts={timestamp};nonce={nonce};body_sha256={body_hash_b64url}"
+    canonical_message = f"method={method.upper()};path={route_path};ts={timestamp};nonce={nonce};body_sha256={body_hash_b64url}"
 
     # Compute HMAC signature
     signature = hmac.new(
@@ -343,7 +349,7 @@ def make_authenticated_request(method, path, body=None):
 
     return requests.request(
         method=method,
-        url=f"{API_URL}{path}",
+        url=f"{API_URL}{API_BASE_PATH}{route_path}",
         headers=headers,
         json=body
     )
@@ -368,7 +374,8 @@ else:
 API_SECRET="your-api-secret-here"
 API_URL="https://monitor.example.com"
 METHOD="POST"
-PATH="/heartbeat"
+API_BASE_PATH="/api"
+ROUTE_PATH="/heartbeat"
 
 # Generate timestamp and nonce
 TIMESTAMP=$(date +%s)
@@ -381,13 +388,13 @@ BODY='{"connection_state":"up","timestamp":"2025-12-02T10:30:00.000Z"}'
 BODY_HASH=$(echo -n "$BODY" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -d '=')
 
 # Build canonical message
-CANONICAL_MESSAGE="method=${METHOD};path=${PATH};ts=${TIMESTAMP};nonce=${NONCE};body_sha256=${BODY_HASH}"
+CANONICAL_MESSAGE="method=${METHOD};path=${ROUTE_PATH};ts=${TIMESTAMP};nonce=${NONCE};body_sha256=${BODY_HASH}"
 
 # Compute HMAC signature (base64url encoding)
 SIGNATURE=$(echo -n "$CANONICAL_MESSAGE" | openssl dgst -sha256 -hmac "$API_SECRET" -binary | base64 | tr '+/' '-_' | tr -d '=')
 
 # Make request
-curl -X "$METHOD" "${API_URL}${PATH}" \
+curl -X "$METHOD" "${API_URL}${API_BASE_PATH}${ROUTE_PATH}" \
   -H "Authorization: Bearer $SIGNATURE" \
   -H "Signature-Timestamp: $TIMESTAMP" \
   -H "Signature-Nonce: $NONCE" \
@@ -435,9 +442,10 @@ func computeSignature(method, path, timestamp, nonce, bodyString, secret string)
     return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func makeAuthenticatedRequest(method, path string, body interface{}) (*http.Response, error) {
+func makeAuthenticatedRequest(method, routePath string, body interface{}) (*http.Response, error) {
     apiSecret := os.Getenv("API_SECRET")
     apiURL := "https://monitor.example.com"
+    apiBasePath := "/api"
 
     // Generate timestamp and nonce
     timestamp := fmt.Sprintf("%d", time.Now().Unix())
@@ -454,15 +462,15 @@ func makeAuthenticatedRequest(method, path string, body interface{}) (*http.Resp
     }
 
     // Compute signature
-    signature := computeSignature(method, path, timestamp, nonce, bodyString, apiSecret)
+    signature := computeSignature(method, routePath, timestamp, nonce, bodyString, apiSecret)
 
     // Create request
     var req *http.Request
     var err error
     if len(bodyBytes) > 0 {
-        req, err = http.NewRequest(method, apiURL+path, bytes.NewReader(bodyBytes))
+        req, err = http.NewRequest(method, apiURL+apiBasePath+routePath, bytes.NewReader(bodyBytes))
     } else {
-        req, err = http.NewRequest(method, apiURL+path, nil)
+        req, err = http.NewRequest(method, apiURL+apiBasePath+routePath, nil)
     }
     if err != nil {
         return nil, err
