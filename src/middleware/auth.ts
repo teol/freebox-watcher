@@ -183,8 +183,9 @@ export function authMiddleware(
         return;
     }
 
-    // Get request body as JSON string (empty string for GET requests or no body)
-    const bodyString = request.body ? JSON.stringify(request.body) : '';
+    // Get raw request body (captured by preParsing hook) or empty string for GET requests
+    // Using raw body ensures consistent HMAC signatures regardless of JSON property order
+    const bodyString = request.rawBody || '';
 
     // Build canonical message
     const canonicalMessage = buildCanonicalMessage(

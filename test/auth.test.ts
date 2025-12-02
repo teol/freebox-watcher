@@ -2,6 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { authMiddleware } from '../src/middleware/auth.js';
+import { registerRawBodyCapture } from '../src/middleware/rawBodyCapture.js';
 import { computeHmac, getCurrentTimestamp, generateNonce } from './helpers.js';
 
 describe('HMAC Authentication Middleware', () => {
@@ -14,6 +15,9 @@ describe('HMAC Authentication Middleware', () => {
         process.env.API_SECRET = VALID_API_SECRET;
 
         fastify = Fastify({ logger: false });
+
+        // Register raw body capture (required for HMAC)
+        await registerRawBodyCapture(fastify);
 
         // Register test routes with auth middleware
         fastify.get('/test-protected', { preHandler: authMiddleware }, async () => {
@@ -140,8 +144,7 @@ describe('HMAC Authentication Middleware', () => {
         it('should accept POST requests with valid HMAC signature', async () => {
             const timestamp = getCurrentTimestamp();
             const nonce = generateNonce();
-            const payload = { data: 'some data' };
-            const bodyString = JSON.stringify(payload);
+            const bodyString = '{"data":"some data"}';
             const signature = computeHmac(
                 'POST',
                 '/test-post-protected',
@@ -158,8 +161,9 @@ describe('HMAC Authentication Middleware', () => {
                     authorization: `Bearer ${signature}`,
                     'signature-timestamp': timestamp,
                     'signature-nonce': nonce,
+                    'content-type': 'application/json',
                 },
-                payload: payload,
+                payload: bodyString,
             });
 
             assert.strictEqual(response.statusCode, 200);

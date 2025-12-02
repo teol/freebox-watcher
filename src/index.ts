@@ -27,6 +27,13 @@ await fastify.register(rateLimit, {
 });
 
 /**
+ * Register raw body capture for HMAC signature verification
+ */
+await import('./middleware/rawBodyCapture.js').then(({ registerRawBodyCapture }) =>
+    registerRawBodyCapture(fastify)
+);
+
+/**
  * Initialize services with logger dependency injection
  */
 const notificationService = new NotificationService(fastify.log);
