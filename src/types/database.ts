@@ -6,6 +6,17 @@ export interface HeartbeatsTable {
     status: string;
     timestamp: Date;
     received_at: Date;
+    token: string | null;
+    ipv4: string | null;
+    ipv6: string | null;
+    media_state: string | null;
+    connection_type: string | null;
+    bandwidth_down: number | null;
+    bandwidth_up: number | null;
+    rate_down: number | null;
+    rate_up: number | null;
+    bytes_down: number | null;
+    bytes_up: number | null;
     metadata: string | null;
 }
 
@@ -15,6 +26,17 @@ export interface HeartbeatsTable {
 export interface HeartbeatsInsert {
     status: string;
     timestamp: Date;
+    token?: string | null;
+    ipv4?: string | null;
+    ipv6?: string | null;
+    media_state?: string | null;
+    connection_type?: string | null;
+    bandwidth_down?: number | null;
+    bandwidth_up?: number | null;
+    rate_down?: number | null;
+    rate_up?: number | null;
+    bytes_down?: number | null;
+    bytes_up?: number | null;
     metadata?: string | null;
     received_at?: Date;
 }

@@ -6,6 +6,17 @@ export interface HeartbeatRecord {
     status: string;
     timestamp: Date;
     received_at: Date;
+    token: string | null;
+    ipv4: string | null;
+    ipv6: string | null;
+    media_state: string | null;
+    connection_type: string | null;
+    bandwidth_down: number | null;
+    bandwidth_up: number | null;
+    rate_down: number | null;
+    rate_up: number | null;
+    bytes_down: number | null;
+    bytes_up: number | null;
     metadata: Record<string, unknown> | null;
 }
 
@@ -36,7 +47,22 @@ export class HeartbeatService {
      * @returns The ID of the inserted heartbeat
      */
     async recordHeartbeat(heartbeatData: HeartbeatInput): Promise<number> {
-        const { connection_state, timestamp, token, ...additionalFields } = heartbeatData;
+        const {
+            connection_state,
+            timestamp,
+            token,
+            ipv4,
+            ipv6,
+            media_state,
+            connection_type,
+            bandwidth_down,
+            bandwidth_up,
+            rate_down,
+            rate_up,
+            bytes_down,
+            bytes_up,
+            ...additionalFields
+        } = heartbeatData;
 
         // Collect all additional fields into metadata, filtering out undefined values
         const metadata = Object.fromEntries(
@@ -46,6 +72,17 @@ export class HeartbeatService {
         const insertData: HeartbeatsInsert = {
             status: connection_state,
             timestamp: new Date(timestamp),
+            token: token ?? null,
+            ipv4: ipv4 ?? null,
+            ipv6: ipv6 ?? null,
+            media_state: media_state ?? null,
+            connection_type: connection_type ?? null,
+            bandwidth_down: bandwidth_down ?? null,
+            bandwidth_up: bandwidth_up ?? null,
+            rate_down: rate_down ?? null,
+            rate_up: rate_up ?? null,
+            bytes_down: bytes_down ?? null,
+            bytes_up: bytes_up ?? null,
             metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
         };
 
