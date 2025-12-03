@@ -81,6 +81,9 @@ async function start(): Promise<void> {
 
         // Start downtime monitoring
         fastify.downtimeMonitor.start();
+
+        // Send startup notification
+        await fastify.notificationService.sendStartupNotification();
     } catch (error) {
         fastify.log.error(error);
         process.exit(1);

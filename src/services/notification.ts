@@ -70,6 +70,20 @@ export class NotificationService {
     }
 
     /**
+     * Send a startup notification when the service launches
+     */
+    async sendStartupNotification(): Promise<void> {
+        await this.sendMessage('freebox-watcher is now running');
+    }
+
+    /**
+     * Send a test notification for configuration validation
+     */
+    async sendTestNotification(): Promise<void> {
+        await this.sendMessage('This is a test notification');
+    }
+
+    /**
      * Send initial downtime alert
      */
     async sendDowntimeAlert(
