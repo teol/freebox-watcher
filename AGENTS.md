@@ -24,6 +24,7 @@ Welcome, 🤖 AI assistant! Please follow these guidelines when contributing to 
 - If a test script is available, run `yarn test` before submitting a contribution
 - Build the project with `yarn build` to ensure TypeScript compilation succeeds
 - Format modified files with `yarn format` (four-space indent; semicolons required)
+- Run `yarn format:check` before finalizing any task to ensure syntax and style are clean
 - Commit messages and PR titles must be in English and follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)
 - Pull requests must include a **Summary** describing the changes and a **Testing** section listing the commands run
 - Provide line citations when referencing code or command output
