@@ -6,7 +6,6 @@ export interface HeartbeatRecord {
     status: string;
     timestamp: Date;
     received_at: Date;
-    token: string | null;
     ipv4: string | null;
     ipv6: string | null;
     media_state: string | null;
@@ -23,7 +22,6 @@ export interface HeartbeatRecord {
 export interface HeartbeatInput {
     connection_state: string;
     timestamp: string | Date;
-    token?: string;
     ipv4?: string;
     ipv6?: string;
     media_state?: string;
@@ -50,7 +48,6 @@ export class HeartbeatService {
         const {
             connection_state,
             timestamp,
-            token,
             ipv4,
             ipv6,
             media_state,
@@ -72,7 +69,6 @@ export class HeartbeatService {
         const insertData: HeartbeatsInsert = {
             status: connection_state,
             timestamp: new Date(timestamp),
-            token: token ?? null,
             ipv4: ipv4 ?? null,
             ipv6: ipv6 ?? null,
             media_state: media_state ?? null,

@@ -24,7 +24,6 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                 properties: {
                     connection_state: { type: 'string' },
                     timestamp: { type: 'string' },
-                    token: { type: 'string' },
                     ipv4: { type: 'string' },
                     ipv6: { type: 'string' },
                     media_state: { type: 'string' },
