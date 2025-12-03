@@ -4,7 +4,7 @@
     "description": "A monitoring service for Freebox Delta that tracks uptime and alerts on downtime events",
     "main": "dist/src/index.js",
     "type": "module",
-    "packageManager": "yarn@4.10.3",
+    "packageManager": "yarn@4.12.0",
     "engines": {
         "node": ">=22.0.0"
     },
