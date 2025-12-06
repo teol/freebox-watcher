@@ -30,39 +30,42 @@ function getLogLevel(): pino.Level {
 }
 
 /**
- * Create and configure the application logger instance.
- * This single instance is used throughout the application (Fastify, services, etc.)
- * to ensure consistent logging behavior.
- *
- * Development: Pretty-printed console output
- * Production: JSON logs to both console (stdout) and rotating file
- *             Falls back to console-only if file logging cannot be initialized
+ * Create shared pino-pretty transport configuration for pretty-printed logs.
+ * Used in both development and production environments for better readability.
  */
-function createApplicationLogger(): pino.Logger {
+function createPrettyTransport(colorize: boolean): pino.TransportSingleOptions {
+    return {
+        target: 'pino-pretty',
+        options: {
+            colorize,
+            translateTime: 'yyyy-mm-dd HH:MM:ss.l',
+            ignore: 'pid,hostname',
+            customColors: 'fatal:bgRed,error:red,warn:yellow,info:green,debug:blue,trace:gray',
+        },
+    };
+}
+
+/**
+ * Get base Pino logger configuration.
+ * This shared configuration is used by both Fastify and standalone scripts.
+ *
+ * Development: Pretty-printed colored console output
+ * Production: Structured JSON logging for easier parsing by log aggregation services
+ */
+function getBaseLoggerOptions(): pino.LoggerOptions {
     const isDevelopment = process.env.NODE_ENV !== 'production';
     const logLevel = getLogLevel();
 
     if (isDevelopment) {
-        // Development: console with pino-pretty for better readability
-        return pino({
+        const enableColors = process.env.LOG_COLORS !== 'false';
+        return {
             level: logLevel,
-            transport: {
-                target: 'pino-pretty',
-                options: {
-                    colorize: true,
-                    translateTime: 'yyyy-mm-dd HH:MM:ss.l',
-                    ignore: 'pid,hostname',
-                    customColors:
-                        'fatal:bgRed,error:red,warn:yellow,info:green,debug:blue,trace:gray',
-                },
-            },
-        });
+            transport: createPrettyTransport(enableColors),
+        };
     }
 
-    // Production: attempt to set up file rotation
-    const logsDir = ensureLogsDirectory();
-
-    const baseConfig = {
+    // For production, return a base config for JSON logging.
+    return {
         level: logLevel,
         formatters: {
             level: (label: string) => {
@@ -70,14 +73,47 @@ function createApplicationLogger(): pino.Logger {
             },
         },
     };
+}
 
-    if (logsDir === null) {
-        // Failed to create logs directory, fall back to console-only logging
-        console.warn('File logging disabled due to logs directory creation failure');
-        return pino(baseConfig, process.stdout);
+/**
+ * Get Pino logger options for Fastify.
+ * This returns configuration that Fastify v5 can use to create its logger.
+ *
+ * Development: Pretty-printed colored console output (set LOG_COLORS=false to disable)
+ * Production: Structured JSON logging
+ */
+export function getLoggerOptions(): pino.LoggerOptions {
+    return getBaseLoggerOptions();
+}
+
+/**
+ * Create and configure the application logger instance for standalone scripts.
+ * This single instance is used in scripts that don't use Fastify.
+ *
+ * Development: Pretty-printed colored console output
+ * Production: JSON logging with optional file rotation
+ *             Falls back to console-only if file logging cannot be initialized
+ *
+ * Note: File rotation is only attempted in production and requires write access to ./logs
+ */
+function createApplicationLogger(): pino.Logger {
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    const config = getBaseLoggerOptions();
+
+    if (isDevelopment) {
+        return pino(config);
     }
 
-    // Set up rotating file stream
+    // Production logging (JSON)
+    const logsDir = ensureLogsDirectory();
+
+    if (logsDir === null) {
+        // Fallback to console-only logging
+        console.warn('File logging disabled due to logs directory creation failure');
+        return pino(config);
+    }
+
+    // Set up rotating file stream for production logs
     const fileStream = createStream('app.log', {
         interval: '1d', // Rotate daily
         maxFiles: 30, // Keep 30 days of logs
@@ -85,7 +121,7 @@ function createApplicationLogger(): pino.Logger {
         compress: 'gzip', // Compress rotated logs
     });
 
-    return pino(baseConfig, pino.multistream([{ stream: process.stdout }, { stream: fileStream }]));
+    return pino(config, pino.multistream([{ stream: process.stdout }, { stream: fileStream }]));
 }
 
 /**
