@@ -36,7 +36,7 @@ function getLogLevel(): pino.Level {
  * Development: Pretty-printed console output
  * Production: JSON logs to console
  */
-export function getLoggerOptions(): pino.LoggerOptions | boolean {
+export function getLoggerOptions(): pino.LoggerOptions {
     const isDevelopment = process.env.NODE_ENV !== 'production';
     const logLevel = getLogLevel();
 
