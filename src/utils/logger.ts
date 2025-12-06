@@ -50,16 +50,28 @@ function createPrettyTransport(colorize: boolean): pino.TransportSingleOptions {
  * This shared configuration is used by both Fastify and standalone scripts.
  *
  * Development: Pretty-printed colored console output
- * Production: Pretty-printed output (colors optional via LOG_COLORS env var)
+ * Production: Structured JSON logging for easier parsing by log aggregation services
  */
 function getBaseLoggerOptions(): pino.LoggerOptions {
     const isDevelopment = process.env.NODE_ENV !== 'production';
     const logLevel = getLogLevel();
-    const enableColors = isDevelopment || process.env.LOG_COLORS === 'true';
 
+    if (isDevelopment) {
+        const enableColors = process.env.LOG_COLORS !== 'false';
+        return {
+            level: logLevel,
+            transport: createPrettyTransport(enableColors),
+        };
+    }
+
+    // For production, return a base config for JSON logging.
     return {
         level: logLevel,
-        transport: createPrettyTransport(enableColors),
+        formatters: {
+            level: (label: string) => {
+                return { level: label };
+            },
+        },
     };
 }
 
@@ -67,8 +79,8 @@ function getBaseLoggerOptions(): pino.LoggerOptions {
  * Get Pino logger options for Fastify.
  * This returns configuration that Fastify v5 can use to create its logger.
  *
- * Development: Pretty-printed colored console output
- * Production: Pretty-printed output (set LOG_COLORS=true for colors)
+ * Development: Pretty-printed colored console output (set LOG_COLORS=false to disable)
+ * Production: Structured JSON logging
  */
 export function getLoggerOptions(): pino.LoggerOptions {
     return getBaseLoggerOptions();
@@ -79,27 +91,26 @@ export function getLoggerOptions(): pino.LoggerOptions {
  * This single instance is used in scripts that don't use Fastify.
  *
  * Development: Pretty-printed colored console output
- * Production: Pretty-printed output with optional file rotation
+ * Production: JSON logging with optional file rotation
  *             Falls back to console-only if file logging cannot be initialized
  *
  * Note: File rotation is only attempted in production and requires write access to ./logs
  */
 function createApplicationLogger(): pino.Logger {
     const isDevelopment = process.env.NODE_ENV !== 'production';
-    const baseConfig = getBaseLoggerOptions();
+    const config = getBaseLoggerOptions();
 
-    // Development or production without file rotation: use base config
     if (isDevelopment) {
-        return pino(baseConfig);
+        return pino(config);
     }
 
-    // Production: attempt to set up file rotation in addition to console output
+    // Production logging (JSON)
     const logsDir = ensureLogsDirectory();
 
     if (logsDir === null) {
-        // Failed to create logs directory, fall back to console-only logging
+        // Fallback to console-only logging
         console.warn('File logging disabled due to logs directory creation failure');
-        return pino(baseConfig);
+        return pino(config);
     }
 
     // Set up rotating file stream for production logs
@@ -110,22 +121,7 @@ function createApplicationLogger(): pino.Logger {
         compress: 'gzip', // Compress rotated logs
     });
 
-    // In production with file rotation, we need to use multistream
-    // Remove the transport from baseConfig and use plain JSON + multistream
-    const { transport, ...configWithoutTransport } = baseConfig;
-    const productionConfig = {
-        ...configWithoutTransport,
-        formatters: {
-            level: (label: string) => {
-                return { level: label };
-            },
-        },
-    };
-
-    return pino(
-        productionConfig,
-        pino.multistream([{ stream: process.stdout }, { stream: fileStream }])
-    );
+    return pino(config, pino.multistream([{ stream: process.stdout }, { stream: fileStream }]));
 }
 
 /**
