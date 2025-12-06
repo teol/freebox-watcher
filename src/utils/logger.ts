@@ -30,9 +30,47 @@ function getLogLevel(): pino.Level {
 }
 
 /**
- * Create and configure the application logger instance.
- * This single instance is used throughout the application (Fastify, services, etc.)
- * to ensure consistent logging behavior.
+ * Get Pino logger options for Fastify.
+ * This returns configuration that Fastify v5 can use to create its logger.
+ *
+ * Development: Pretty-printed console output
+ * Production: JSON logs to console
+ */
+export function getLoggerOptions(): pino.LoggerOptions | boolean {
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    const logLevel = getLogLevel();
+
+    if (isDevelopment) {
+        // Development: console with pino-pretty for better readability
+        return {
+            level: logLevel,
+            transport: {
+                target: 'pino-pretty',
+                options: {
+                    colorize: true,
+                    translateTime: 'yyyy-mm-dd HH:MM:ss.l',
+                    ignore: 'pid,hostname',
+                    customColors:
+                        'fatal:bgRed,error:red,warn:yellow,info:green,debug:blue,trace:gray',
+                },
+            },
+        };
+    }
+
+    // Production: JSON logs to console
+    return {
+        level: logLevel,
+        formatters: {
+            level: (label: string) => {
+                return { level: label };
+            },
+        },
+    };
+}
+
+/**
+ * Create and configure the application logger instance for standalone scripts.
+ * This single instance is used in scripts that don't use Fastify.
  *
  * Development: Pretty-printed console output
  * Production: JSON logs to both console (stdout) and rotating file
