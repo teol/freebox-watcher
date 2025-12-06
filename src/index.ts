@@ -13,6 +13,7 @@ import { API_PREFIX } from './constants/api.js';
  */
 const fastify: FastifyInstance = Fastify({
     logger: getLoggerOptions(),
+    trustProxy: true,
 });
 
 /**
