@@ -97,23 +97,21 @@ export function getLoggerOptions(): pino.LoggerOptions {
  * Note: File rotation is only attempted in production and requires write access to ./logs
  */
 function createApplicationLogger(): pino.Logger {
-    const isDevelopment = process.env.NODE_ENV !== 'production';
     const config = getBaseLoggerOptions();
 
-    if (isDevelopment) {
+    if (process.env.NODE_ENV !== 'production') {
+        // For development, use the base configuration directly.
         return pino(config);
     }
 
-    // Production logging (JSON)
+    // For production, add a rotating file stream.
     const logsDir = ensureLogsDirectory();
 
-    if (logsDir === null) {
-        // Fallback to console-only logging
+    if (!logsDir) {
         console.warn('File logging disabled due to logs directory creation failure');
-        return pino(config);
+        return pino(config); // Fallback to console-only JSON logging.
     }
 
-    // Set up rotating file stream for production logs
     const fileStream = createStream('app.log', {
         interval: '1d', // Rotate daily
         maxFiles: 30, // Keep 30 days of logs
