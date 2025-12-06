@@ -89,7 +89,7 @@ async function sendHeartbeat(
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${signature}`,
+            Authorization: `Bearer ${signature}`,
             'Signature-Timestamp': timestamp,
             'Signature-Nonce': nonce,
         },
