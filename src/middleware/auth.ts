@@ -133,8 +133,11 @@ export function authMiddleware(
 ): void {
     const apiSecret = process.env.API_SECRET?.trim();
 
+    request.log.debug('[AUTH] Starting authentication');
+
     // Validate API secret configuration
     if (!apiSecret || apiSecret.length === 0) {
+        request.log.error('[AUTH] API secret not configured');
         void reply.code(500).send({
             error: 'Internal Server Error',
             message: 'API secret not configured',
@@ -144,6 +147,10 @@ export function authMiddleware(
 
     // Validate API secret meets minimum security requirements
     if (apiSecret.length < MIN_API_SECRET_LENGTH) {
+        request.log.error('[AUTH] API secret too short', {
+            length: apiSecret.length,
+            required: MIN_API_SECRET_LENGTH,
+        });
         void reply.code(500).send({
             error: 'Internal Server Error',
             message: `API secret must be at least ${MIN_API_SECRET_LENGTH} characters`,
@@ -162,12 +169,22 @@ export function authMiddleware(
         request.headers['signature-nonce'] as string | string[] | undefined
     );
 
+    request.log.debug('[AUTH] Headers received', {
+        hasAuthHeader: !!authHeader,
+        hasTimestamp: !!timestampHeader,
+        hasNonce: !!nonceHeader,
+        authHeaderType: typeof authHeader,
+        timestampHeaderType: typeof timestampHeader,
+        nonceHeaderType: typeof nonceHeader,
+    });
+
     // Validate header types (reject if arrays - multiple values sent)
     if (
         typeof authHeader !== 'string' ||
         typeof timestampHeader !== 'string' ||
         typeof nonceHeader !== 'string'
     ) {
+        request.log.warn('[AUTH] Invalid header types');
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication failed',
@@ -180,6 +197,11 @@ export function authMiddleware(
 
     // Validate all required components are present
     if (!signature || !timestampHeader || !nonceHeader) {
+        request.log.warn('[AUTH] Missing required auth components', {
+            hasSignature: !!signature,
+            hasTimestamp: !!timestampHeader,
+            hasNonce: !!nonceHeader,
+        });
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication failed',
@@ -189,7 +211,25 @@ export function authMiddleware(
 
     // Parse and validate timestamp
     const timestamp = Number.parseInt(timestampHeader, 10);
+    const now = Math.floor(Date.now() / 1000);
+    const timestampAge = Math.abs(now - timestamp);
+
+    request.log.debug('[AUTH] Timestamp validation', {
+        timestamp,
+        now,
+        age: timestampAge,
+        maxAge: MAX_TIMESTAMP_AGE,
+        isNaN: Number.isNaN(timestamp),
+        isValid: !Number.isNaN(timestamp) && isValidTimestamp(timestamp),
+    });
+
     if (Number.isNaN(timestamp) || !isValidTimestamp(timestamp)) {
+        request.log.warn('[AUTH] Invalid timestamp', {
+            timestampHeader,
+            parsed: timestamp,
+            age: timestampAge,
+            maxAge: MAX_TIMESTAMP_AGE,
+        });
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication failed',
@@ -199,6 +239,7 @@ export function authMiddleware(
 
     // Validate nonce (must be non-empty)
     if (nonceHeader.trim().length === 0) {
+        request.log.warn('[AUTH] Empty nonce');
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication failed',
@@ -225,11 +266,31 @@ export function authMiddleware(
         bodyString
     );
 
+    request.log.debug('[AUTH] Canonical message built', {
+        method: request.method,
+        originalUrl: request.url,
+        canonicalPath,
+        timestamp: timestampHeader,
+        nonce: nonceHeader,
+        bodyLength: bodyString.length,
+        canonicalMessage,
+    });
+
     // Compute expected HMAC signature
     const expectedSignature = computeHmac(canonicalMessage, apiSecret);
 
+    request.log.debug('[AUTH] Signature comparison', {
+        receivedSignature: signature,
+        expectedSignature,
+        match: signature === expectedSignature,
+    });
+
     // Validate signature using constant-time comparison
     if (!validateSignature(signature, expectedSignature)) {
+        request.log.warn('[AUTH] Signature mismatch', {
+            received: signature,
+            expected: expectedSignature,
+        });
         void reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication failed',
@@ -237,6 +298,7 @@ export function authMiddleware(
         return;
     }
 
+    request.log.debug('[AUTH] Authentication successful');
     // Authentication successful
     done();
 }
