@@ -8,9 +8,10 @@ import { API_PREFIX } from '../constants/api.js';
 const MIN_API_SECRET_LENGTH = 32;
 
 /**
- * Maximum age of a request timestamp in seconds (60 seconds)
+ * Maximum age of a request timestamp in seconds (7200 seconds = 2 hours)
+ * Increased to handle clock drift between client and server
  */
-const MAX_TIMESTAMP_AGE = 60;
+const MAX_TIMESTAMP_AGE = 7200;
 
 /**
  * Maximum allowed future timestamp skew in seconds (10 seconds for clock drift)

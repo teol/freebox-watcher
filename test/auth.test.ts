@@ -230,9 +230,9 @@ describe('HMAC Authentication Middleware', () => {
     });
 
     describe('Timestamp Validation', () => {
-        it('should reject expired timestamp (older than 60 seconds)', async () => {
+        it('should reject expired timestamp (older than 2 hours)', async () => {
             const nonce = generateNonce();
-            const expiredTimestamp = (Math.floor(Date.now() / 1000) - 61).toString(); // 61 seconds ago
+            const expiredTimestamp = (Math.floor(Date.now() / 1000) - 7201).toString(); // 7201 seconds ago (>2h)
             const signature = computeHmac(
                 'GET',
                 '/test-protected',
