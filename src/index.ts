@@ -5,14 +5,14 @@ import { testConnection, closeConnection } from './db/config.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
 import { NotificationService } from './services/notification.js';
 import { DowntimeMonitor } from './services/downtimeMonitor.js';
-import { logger } from './utils/logger.js';
+import { getLoggerOptions } from './utils/logger.js';
 import { API_PREFIX } from './constants/api.js';
 
 /**
- * Create Fastify instance with shared logger
+ * Create Fastify instance with logger configuration
  */
 const fastify: FastifyInstance = Fastify({
-    logger: logger,
+    logger: getLoggerOptions(),
 });
 
 /**
