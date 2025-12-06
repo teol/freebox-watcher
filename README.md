@@ -12,6 +12,7 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 - 🔒 Secure HMAC-SHA256 authentication with timing-attack protection and replay prevention
 - 🛡️ Rate limiting (5 requests per minute)
 - 📊 MariaDB storage for heartbeat history
+- 📈 Daily Discord report with bandwidth rate chart (optional)
 - 🔔 Automatic downtime detection (5 minutes without heartbeat)
 - 📲 Telegram notifications for downtime alerts and recovery
 - 📝 Structured logging with Pino
@@ -117,6 +118,9 @@ HEARTBEAT_TIMEOUT=300000
 DOWNTIME_CHECK_INTERVAL=60000
 DOWNTIME_CONFIRMATION_DELAY=1800000
 
+# Reporting (optional)
+DISCORD_WEBHOOK_URL=
+
 # Telegram Notifications (optional)
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_CHAT_ID=your-telegram-chat-id
@@ -138,6 +142,7 @@ TELEGRAM_CHAT_ID=your-telegram-chat-id
 - `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
+- `DISCORD_WEBHOOK_URL`: Discord webhook URL for receiving the daily heartbeat rate chart at 05:00 (optional)
 
 ## Database Schema
 

@@ -7,6 +7,7 @@ import { NotificationService } from './services/notification.js';
 import { DowntimeMonitor } from './services/downtimeMonitor.js';
 import { getLoggerOptions } from './utils/logger.js';
 import { API_PREFIX } from './constants/api.js';
+import { HeartbeatReportService } from './services/heartbeatReport.js';
 
 /**
  * Create Fastify instance with logger configuration
@@ -40,12 +41,14 @@ await import('./middleware/rawBodyCapture.js').then(({ registerRawBodyCapture })
  */
 const notificationService = new NotificationService(fastify.log);
 const downtimeMonitor = new DowntimeMonitor(fastify.log, notificationService);
+const heartbeatReportService = new HeartbeatReportService(fastify.log);
 
 /**
  * Decorate fastify instance with services
  */
 fastify.decorate('notificationService', notificationService);
 fastify.decorate('downtimeMonitor', downtimeMonitor);
+fastify.decorate('heartbeatReportService', heartbeatReportService);
 
 /**
  * Register routes
@@ -85,6 +88,9 @@ async function start(): Promise<void> {
 
         // Send startup notification
         await fastify.notificationService.sendStartupNotification();
+
+        // Start daily heartbeat rate reporting
+        fastify.heartbeatReportService.start();
     } catch (error) {
         fastify.log.error(error);
         process.exit(1);

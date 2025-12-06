@@ -152,6 +152,19 @@ export class HeartbeatService {
 
         return await db<HeartbeatsTable>('heartbeats').where('timestamp', '<', cutoffDate).delete();
     }
+
+    /**
+     * Get all stored heartbeats ordered by timestamp
+     * @returns Array of heartbeats
+     */
+    async getAllHeartbeats(): Promise<HeartbeatRecord[]> {
+        const heartbeats = await db<HeartbeatsTable>('heartbeats').orderBy('timestamp', 'asc');
+
+        return heartbeats.map((heartbeat) => ({
+            ...heartbeat,
+            metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
+        }));
+    }
 }
 
 export default new HeartbeatService();
