@@ -18,8 +18,8 @@ export class DailyChartService {
     private discordWebhookUrl: string | null;
     private chartWidth = 900;
     private chartHeight = 400;
-    private FormDataConstructor: typeof FormData;
-    private BlobConstructor: typeof Blob;
+    private FormDataConstructor!: typeof FormData;
+    private BlobConstructor!: typeof Blob;
 
     constructor(heartbeatService: HeartbeatService, discordWebhookUrl?: string) {
         this.heartbeatService = heartbeatService;
