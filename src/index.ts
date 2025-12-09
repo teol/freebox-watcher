@@ -5,6 +5,8 @@ import { testConnection, closeConnection } from './db/config.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
 import { NotificationService } from './services/notification.js';
 import { DowntimeMonitor } from './services/downtimeMonitor.js';
+import { HeartbeatService } from './services/heartbeat.js';
+import { DailyChartService } from './services/dailyChart.js';
 import { getLoggerOptions } from './utils/logger.js';
 import { API_PREFIX } from './constants/api.js';
 
@@ -40,12 +42,15 @@ await import('./middleware/rawBodyCapture.js').then(({ registerRawBodyCapture })
  */
 const notificationService = new NotificationService(fastify.log);
 const downtimeMonitor = new DowntimeMonitor(fastify.log, notificationService);
+const heartbeatService = new HeartbeatService();
+const dailyChartService = new DailyChartService(heartbeatService, process.env.DISCORD_WEBHOOK_URL);
 
 /**
  * Decorate fastify instance with services
  */
 fastify.decorate('notificationService', notificationService);
 fastify.decorate('downtimeMonitor', downtimeMonitor);
+fastify.decorate('dailyChartService', dailyChartService);
 
 /**
  * Register routes
@@ -83,6 +88,9 @@ async function start(): Promise<void> {
         // Start downtime monitoring
         fastify.downtimeMonitor.start();
 
+        // Start daily chart service
+        fastify.dailyChartService.start();
+
         // Send startup notification
         await fastify.notificationService.sendStartupNotification();
     } catch (error) {
@@ -100,6 +108,9 @@ async function shutdown(signal: string): Promise<void> {
     try {
         // Stop downtime monitoring
         fastify.downtimeMonitor.stop();
+
+        // Stop daily chart service
+        fastify.dailyChartService.stop();
 
         await fastify.close();
         await closeConnection();
