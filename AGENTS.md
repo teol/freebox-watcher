@@ -19,19 +19,19 @@ Welcome, 🤖 AI assistant! Please follow these guidelines when contributing to 
 - Respect the existing code style unless instructed otherwise
 - Use English in code, comments, commit messages and branch names
 
-## Commits Guidelines
+## Commits and Pull Requests Guidelines
 
 - If a test script is available, run `yarn test` before submitting a contribution
 - Build the project with `yarn build` to ensure TypeScript compilation succeeds
 - Format modified files with `yarn format` (four-space indent; semicolons required)
 - Run `yarn format:check` before finalizing any task to ensure syntax and style are clean
-- Commit messages and PR titles must be in English and follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)
+- **IMPORTANT:** Both commit messages AND pull request titles must be in English and follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)
 - Pull requests must include a **Summary** describing the changes and a **Testing** section listing the commands run
 - Provide line citations when referencing code or command output
 
 ### Conventional Commits Format
 
-Commit messages must follow this structure:
+Both commit messages AND pull request titles must follow this structure:
 
 ```
 <type>[optional scope]: <description>
@@ -54,7 +54,7 @@ Commit messages must follow this structure:
 - `ci`: Changes to CI configuration files and scripts
 - `chore`: Other changes that don't modify src or test files
 
-**Examples:**
+**Examples for commits AND PR titles:**
 
 ```
 feat: add heartbeat monitoring endpoint
@@ -63,6 +63,8 @@ docs: update installation instructions
 refactor: simplify authentication middleware
 test: add unit tests for downtime service
 ```
+
+**Important:** When creating a pull request, the PR title must also follow Conventional Commits format (e.g., "feat: add daily chart generation" not "Add daily chart generation")
 
 ---
 

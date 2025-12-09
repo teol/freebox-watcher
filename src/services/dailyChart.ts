@@ -1,3 +1,4 @@
+import os from 'os';
 import cron from 'node-cron';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 import { ChartConfiguration } from 'chart.js';
@@ -6,6 +7,8 @@ import path from 'path';
 import { logger } from '../utils/logger.js';
 import { HeartbeatService } from './heartbeat.js';
 
+const WATERMARK = 'github.com/teol/freebox-watcher';
+
 /**
  * Service for generating and sending daily heartbeat rate charts to Discord
  */
@@ -13,8 +16,8 @@ export class DailyChartService {
     private cronJob: cron.ScheduledTask | null = null;
     private heartbeatService: HeartbeatService;
     private discordWebhookUrl: string | null;
-    private chartWidth = 1200;
-    private chartHeight = 600;
+    private chartWidth = 900;
+    private chartHeight = 400;
 
     constructor(heartbeatService: HeartbeatService, discordWebhookUrl?: string) {
         this.heartbeatService = heartbeatService;
@@ -63,6 +66,7 @@ export class DailyChartService {
             return;
         }
 
+        let chartPath: string | undefined;
         try {
             logger.info('Starting daily chart generation...');
 
@@ -78,19 +82,28 @@ export class DailyChartService {
             }
 
             // Generate chart image
-            const chartPath = await this.createChartImage(heartbeats);
+            chartPath = await this.createChartImage(heartbeats);
 
             // Send to Discord
             await this.sendToDiscord(chartPath);
 
-            // Delete the image file
-            await fs.unlink(chartPath);
-            logger.info(
-                `Chart generated and sent successfully, temporary file deleted: ${chartPath}`
-            );
+            logger.info('Chart generated and sent successfully');
         } catch (error) {
             logger.error({ error }, 'Error generating or sending daily chart');
             throw error;
+        } finally {
+            // Always clean up temporary file
+            if (chartPath) {
+                try {
+                    await fs.unlink(chartPath);
+                    logger.info(`Temporary file deleted: ${chartPath}`);
+                } catch (unlinkError) {
+                    logger.error(
+                        { error: unlinkError },
+                        `Failed to delete temporary file: ${chartPath}`
+                    );
+                }
+            }
         }
     }
 
@@ -103,22 +116,26 @@ export class DailyChartService {
         const canvasRenderService = new ChartJSNodeCanvas({
             width: this.chartWidth,
             height: this.chartHeight,
-            backgroundColour: 'white',
+            backgroundColour: '#2c2f33',
         });
 
         // Prepare data
         const labels = heartbeats.map((h) => {
             const date = new Date(h.timestamp);
-            return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleTimeString('fr-FR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+            });
         });
 
         const rateDownData = heartbeats.map((h) => (h.rate_down ? h.rate_down / 1000 : null)); // Convert to Kbps
         const rateUpData = heartbeats.map((h) => (h.rate_up ? h.rate_up / 1000 : null)); // Convert to Kbps
 
-        // Determine appropriate unit and scale
-        const maxRate = Math.max(
-            ...rateDownData.filter((v): v is number => v !== null),
-            ...rateUpData.filter((v): v is number => v !== null)
+        // Determine appropriate unit and scale using reduce for better performance
+        const maxRate = [...rateDownData, ...rateUpData].reduce<number>(
+            (max, v) => (v !== null && v > max ? v : max),
+            0
         );
 
         let unit = 'Kbps';
@@ -145,18 +162,22 @@ export class DailyChartService {
                     {
                         label: `Download (${unit})`,
                         data: scaledRateDown,
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: '#4bc0c0',
+                        backgroundColor: 'rgba(75, 192, 192, 0)',
                         tension: 0.1,
-                        fill: true,
+                        fill: false,
+                        pointRadius: 0,
+                        borderWidth: 2,
                     },
                     {
                         label: `Upload (${unit})`,
                         data: scaledRateUp,
-                        borderColor: 'rgb(255, 99, 132)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderColor: '#ff6384',
+                        backgroundColor: 'rgba(255, 99, 132, 0)',
                         tension: 0.1,
-                        fill: true,
+                        fill: false,
+                        pointRadius: 0,
+                        borderWidth: 2,
                     },
                 ],
             },
@@ -165,14 +186,25 @@ export class DailyChartService {
                 plugins: {
                     title: {
                         display: true,
-                        text: `Freebox Network Rate - Last 24 Hours (${new Date().toLocaleDateString('fr-FR')})`,
+                        text: [
+                            WATERMARK,
+                            `Débit Freebox - Dernières 24h (${new Date().toLocaleDateString('fr-FR')})`,
+                        ],
+                        color: '#ffffff',
                         font: {
                             size: 18,
+                        },
+                        padding: {
+                            top: 10,
+                            bottom: 20,
                         },
                     },
                     legend: {
                         display: true,
                         position: 'top',
+                        labels: {
+                            color: '#ffffff',
+                        },
                     },
                 },
                 scales: {
@@ -180,16 +212,28 @@ export class DailyChartService {
                         beginAtZero: true,
                         title: {
                             display: true,
-                            text: `Rate (${unit})`,
+                            text: `Débit (${unit})`,
+                            color: '#ffffff',
+                        },
+                        ticks: {
+                            color: '#ffffff',
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)',
                         },
                     },
                     x: {
                         title: {
                             display: true,
-                            text: 'Time',
+                            text: 'Heure',
+                            color: '#ffffff',
                         },
                         ticks: {
+                            color: '#ffffff',
                             maxTicksLimit: 20,
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)',
                         },
                     },
                 },
@@ -198,8 +242,8 @@ export class DailyChartService {
 
         const imageBuffer = await canvasRenderService.renderToBuffer(configuration);
 
-        // Save to temporary file
-        const tempDir = path.join(process.cwd(), 'temp');
+        // Save to temporary file in OS temp directory
+        const tempDir = path.join(os.tmpdir(), 'freebox-watcher');
         await fs.mkdir(tempDir, { recursive: true });
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
