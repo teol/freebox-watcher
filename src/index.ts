@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import Fastify, { type FastifyInstance } from 'fastify';
-import rateLimit from '@fastify/rate-limit';
 import { testConnection, closeConnection } from './db/config.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
 import { NotificationService } from './services/notification.js';
@@ -19,18 +18,6 @@ const fastify: FastifyInstance = Fastify({
 });
 
 /**
- * Register rate limiting (5 requests per minute)
- */
-await fastify.register(rateLimit, {
-    max: 5,
-    timeWindow: '1 minute',
-    errorResponseBuilder: () => ({
-        error: 'Too Many Requests',
-        message: 'Rate limit exceeded',
-    }),
-});
-
-/**
  * Register raw body capture for HMAC signature verification
  */
 await import('./middleware/rawBodyCapture.js').then(({ registerRawBodyCapture }) =>
@@ -42,6 +29,11 @@ await import('./middleware/rawBodyCapture.js').then(({ registerRawBodyCapture })
  * This makes the server invisible to port scanners and attackers
  */
 fastify.setNotFoundHandler((request, reply) => {
+    // Log invalid route attempts only in non-production environments
+    if (process.env.NODE_ENV !== 'production') {
+        fastify.log.warn({ url: request.url, method: request.method }, 'Invalid route accessed');
+    }
+
     // Destroy the underlying socket without sending any HTTP response
     // This makes it appear as if nothing is listening on this port
     reply.hijack();
@@ -53,8 +45,10 @@ fastify.setNotFoundHandler((request, reply) => {
  * Errors are logged internally but the connection is dropped silently
  */
 fastify.setErrorHandler((error, request, reply) => {
-    // Log the error internally for debugging
-    fastify.log.error({ error, url: request.url, method: request.method }, 'Request error');
+    // Log the error internally for debugging (only in non-production)
+    if (process.env.NODE_ENV !== 'production') {
+        fastify.log.error({ error, url: request.url, method: request.method }, 'Request error');
+    }
 
     // Silently close the connection without revealing server information
     reply.hijack();

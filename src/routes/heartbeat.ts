@@ -1,4 +1,5 @@
 import { type FastifyInstance, type FastifyPluginAsync, type RouteShorthandOptions } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { authMiddleware } from '../middleware/auth.js';
 import heartbeatService, { type HeartbeatInput } from '../services/heartbeat.js';
 import downtimeService from '../services/downtime.js';
@@ -11,6 +12,19 @@ type HeartbeatRouteOptions = RouteShorthandOptions;
  * Heartbeat routes
  */
 export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
+    /**
+     * Register rate limiting on valid routes only (5 requests per minute)
+     * This prevents revealing the API presence on invalid routes
+     */
+    await fastify.register(rateLimit, {
+        max: 5,
+        timeWindow: '1 minute',
+        errorResponseBuilder: () => ({
+            error: 'Too Many Requests',
+            message: 'Rate limit exceeded',
+        }),
+    });
+
     /**
      * POST /heartbeat
      * Record a new heartbeat
