@@ -99,13 +99,10 @@ describe('DailyChartService', () => {
         };
 
         try {
-            await assert.rejects(
-                async () => await service.generateAndSendChart(),
-                (error: Error) => {
-                    assert.ok(error.message.includes('Database connection failed'));
-                    return true;
-                }
-            );
+            // Should not throw - errors are logged but not re-thrown to prevent crashing scheduled tasks
+            await service.generateAndSendChart();
+            // If we reach here, the error was handled gracefully
+            assert.ok(true, 'Error was handled gracefully without throwing');
         } finally {
             // Restore original method
             heartbeatService.getHeartbeatsInRange = originalMethod;
@@ -153,15 +150,10 @@ describe('DailyChartService', () => {
         };
 
         try {
-            await assert.rejects(
-                async () => await service.generateAndSendChart(),
-                (error: Error) => {
-                    assert.ok(error.message.includes('Failed to send chart to Discord'));
-                    return true;
-                }
-            );
+            // Should not throw - errors are logged but not re-thrown to prevent crashing scheduled tasks
+            await service.generateAndSendChart();
 
-            // Verify that temp files were cleaned up
+            // Verify that temp files were cleaned up even on error
             const tempDir = path.join(os.tmpdir(), 'freebox-watcher');
             try {
                 const files = await fs.readdir(tempDir);
