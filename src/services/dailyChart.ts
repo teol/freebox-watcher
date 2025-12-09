@@ -18,10 +18,21 @@ export class DailyChartService {
     private discordWebhookUrl: string | null;
     private chartWidth = 900;
     private chartHeight = 400;
+    private FormDataConstructor!: typeof FormData;
+    private BlobConstructor!: typeof Blob;
 
     constructor(heartbeatService: HeartbeatService, discordWebhookUrl?: string) {
         this.heartbeatService = heartbeatService;
         this.discordWebhookUrl = discordWebhookUrl || null;
+
+        // Fail-fast: Check for required Web APIs at startup
+        if (!globalThis.FormData || !globalThis.Blob) {
+            throw new Error(
+                'FormData and/or Blob APIs are not available in this environment. This application requires Node.js >= 22.0.0.'
+            );
+        }
+        this.FormDataConstructor = globalThis.FormData;
+        this.BlobConstructor = globalThis.Blob;
     }
 
     /**
@@ -90,7 +101,8 @@ export class DailyChartService {
             logger.info('Chart generated and sent successfully');
         } catch (error) {
             logger.error({ error }, 'Error generating or sending daily chart');
-            throw error;
+            // Do not re-throw to prevent crashing the scheduled task, allowing future runs.
+            // The error has been logged for monitoring and debugging purposes.
         } finally {
             // Always clean up temporary file
             if (chartPath) {
@@ -267,9 +279,8 @@ export class DailyChartService {
         const filename = path.basename(imagePath);
 
         // Create form data for Discord webhook
-        const formData = new FormData();
-
-        const blob = new Blob([imageBuffer], { type: 'image/png' });
+        const formData = new this.FormDataConstructor();
+        const blob = new this.BlobConstructor([imageBuffer], { type: 'image/png' });
         formData.append('file', blob, filename);
 
         const payload = {
