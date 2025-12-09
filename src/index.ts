@@ -38,6 +38,30 @@ await import('./middleware/rawBodyCapture.js').then(({ registerRawBodyCapture })
 );
 
 /**
+ * Set custom 404 handler that silently drops connections
+ * This makes the server invisible to port scanners and attackers
+ */
+fastify.setNotFoundHandler((request, reply) => {
+    // Destroy the underlying socket without sending any HTTP response
+    // This makes it appear as if nothing is listening on this port
+    reply.hijack();
+    request.raw.socket?.destroy();
+});
+
+/**
+ * Set custom error handler to prevent information disclosure
+ * Errors are logged internally but the connection is dropped silently
+ */
+fastify.setErrorHandler((error, request, reply) => {
+    // Log the error internally for debugging
+    fastify.log.error({ error, url: request.url, method: request.method }, 'Request error');
+
+    // Silently close the connection without revealing server information
+    reply.hijack();
+    request.raw.socket?.destroy();
+});
+
+/**
  * Initialize services with logger dependency injection
  */
 const notificationService = new NotificationService(fastify.log);
