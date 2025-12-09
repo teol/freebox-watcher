@@ -90,7 +90,8 @@ export class DailyChartService {
             logger.info('Chart generated and sent successfully');
         } catch (error) {
             logger.error({ error }, 'Error generating or sending daily chart');
-            throw error;
+            // Do not re-throw to prevent crashing the scheduled task, allowing future runs.
+            // The error has been logged for monitoring and debugging purposes.
         } finally {
             // Always clean up temporary file
             if (chartPath) {
@@ -267,9 +268,12 @@ export class DailyChartService {
         const filename = path.basename(imagePath);
 
         // Create form data for Discord webhook
-        const formData = new FormData();
+        // Use globalThis to ensure compatibility across Node.js versions
+        const FormDataConstructor = globalThis.FormData || FormData;
+        const BlobConstructor = globalThis.Blob || Blob;
 
-        const blob = new Blob([imageBuffer], { type: 'image/png' });
+        const formData = new FormDataConstructor();
+        const blob = new BlobConstructor([imageBuffer], { type: 'image/png' });
         formData.append('file', blob, filename);
 
         const payload = {
