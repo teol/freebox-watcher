@@ -188,7 +188,7 @@ export class DailyChartService {
                         display: true,
                         text: [
                             WATERMARK,
-                            `Débit Freebox - Dernières 24h (${new Date().toLocaleDateString('fr-FR')})`,
+                            `Freebox Network Rate - Last 24 Hours (${new Date().toLocaleDateString('fr-FR')})`,
                         ],
                         color: '#ffffff',
                         font: {
@@ -212,7 +212,7 @@ export class DailyChartService {
                         beginAtZero: true,
                         title: {
                             display: true,
-                            text: `Débit (${unit})`,
+                            text: `Rate (${unit})`,
                             color: '#ffffff',
                         },
                         ticks: {
@@ -225,7 +225,7 @@ export class DailyChartService {
                     x: {
                         title: {
                             display: true,
-                            text: 'Heure',
+                            text: 'Time',
                             color: '#ffffff',
                         },
                         ticks: {
