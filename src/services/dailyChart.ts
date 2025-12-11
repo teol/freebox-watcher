@@ -1,5 +1,6 @@
 import os from 'os';
 import cron from 'node-cron';
+import * as cronParser from 'cron-parser';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 import { ChartConfiguration } from 'chart.js';
 import fs from 'fs/promises';
@@ -46,47 +47,61 @@ export class DailyChartService {
 
     /**
      * Parses a CRON expression to determine the time interval in hours
-     * Supports patterns like "0 5 * * *" (daily = 24h) and "0 *\/4 * * *" (every 4h)
+     * Uses cron-parser to support a wide range of CRON patterns
      * @param cronExpression - The CRON expression to parse
      * @returns The interval in hours
      */
     public static parseCronInterval(cronExpression: string): number {
-        const parts = cronExpression.trim().split(/\s+/);
+        // Handle empty or whitespace-only expressions
+        if (!cronExpression || !cronExpression.trim()) {
+            logger.warn('Empty CRON expression provided. Using default 24 hours interval.');
+            return 24;
+        }
 
-        if (parts.length < 5) {
+        try {
+            const interval = cronParser.CronExpressionParser.parse(cronExpression, {});
+            const firstRun = interval.next().toDate();
+            const secondRun = interval.next().toDate();
+            const durationMs = secondRun.getTime() - firstRun.getTime();
+
+            // Convert duration to hours, rounding to nearest hour for simplicity
+            const durationHours = Math.round(durationMs / (1000 * 60 * 60));
+
+            // Handle daily or longer intervals that might not be exact multiples of hours
+            if (durationHours >= 24) {
+                logger.info('Parsed CRON schedule: daily (24 hours)');
+                return 24; // Cap at 24 hours for a daily report scope
+            }
+            if (durationHours === 0) {
+                logger.info('Parsed CRON schedule: every hour');
+                return 1; // Minimum interval of 1 hour
+            }
+
+            logger.info(`Parsed CRON schedule: every ${durationHours} hour(s)`);
+            return durationHours;
+        } catch (err) {
             logger.warn(
-                `Invalid CRON expression: "${cronExpression}". Using default 24 hours interval.`
+                `Invalid or unsupported CRON expression: "${cronExpression}". Using default 24 hours interval. Error: ${(err as Error).message}`
             );
             return 24;
         }
+    }
 
-        const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-
-        // Check for hourly patterns: "0 */N * * *" or "0 N * * *"
-        const hourlyMatch = hour.match(/^\*\/(\d+)$/);
-        if (hourlyMatch) {
-            const hours = parseInt(hourlyMatch[1], 10);
-            logger.info(`Parsed CRON schedule: every ${hours} hour(s)`);
-            return hours;
+    /**
+     * Gets a human-readable description of the interval
+     * @param context - The context for the description ('log' or 'discord')
+     * @returns A formatted description string
+     */
+    private getIntervalDescription(context: 'log' | 'discord'): string {
+        if (this.intervalHours === 24) {
+            return context === 'log' ? 'daily' : 'Daily Report';
         }
-
-        // Check if it's a specific hour (daily pattern): "0 5 * * *"
-        if (hour.match(/^\d+$/) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
-            logger.info('Parsed CRON schedule: daily (24 hours)');
-            return 24;
+        if (this.intervalHours === 1) {
+            return context === 'log' ? 'every hour' : 'Hourly Report';
         }
-
-        // Check for wildcard hour pattern: "0 * * * *" (every hour)
-        if (hour === '*') {
-            logger.info('Parsed CRON schedule: every hour');
-            return 1;
-        }
-
-        // Default to 24 hours if pattern is not recognized
-        logger.warn(
-            `Unsupported CRON pattern: "${cronExpression}". Using default 24 hours interval.`
-        );
-        return 24;
+        return context === 'log'
+            ? `every ${this.intervalHours} hours`
+            : `Report (Last ${this.intervalHours} Hours)`;
     }
 
     /**
@@ -107,15 +122,8 @@ export class DailyChartService {
             await this.generateAndSendChart();
         });
 
-        const scheduleDescription =
-            this.intervalHours === 24
-                ? 'daily'
-                : this.intervalHours === 1
-                  ? 'every hour'
-                  : `every ${this.intervalHours} hours`;
-
         logger.info(
-            `Chart service started (schedule: ${this.cronSchedule}, ${scheduleDescription})`
+            `Chart service started (schedule: ${this.cronSchedule}, ${this.getIntervalDescription('log')})`
         );
     }
 
@@ -357,15 +365,8 @@ export class DailyChartService {
         const blob = new this.BlobConstructor([imageBuffer], { type: 'image/png' });
         formData.append('file', blob, filename);
 
-        const timeDescription =
-            this.intervalHours === 24
-                ? 'Daily Report'
-                : this.intervalHours === 1
-                  ? 'Hourly Report'
-                  : `Report (Last ${this.intervalHours} Hours)`;
-
         const payload = {
-            content: `📊 **Freebox Network Rate ${timeDescription}**`,
+            content: `📊 **Freebox Network Rate ${this.getIntervalDescription('discord')}**`,
             embeds: [
                 {
                     color: 0x5865f2,
