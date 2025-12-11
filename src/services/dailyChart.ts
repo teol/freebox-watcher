@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
 import { HeartbeatService } from './heartbeat.js';
 
 const WATERMARK = 'github.com/teol/freebox-watcher';
+const DEFAULT_CRON_SCHEDULE = '0 5 * * *'; // Daily at 5:00 AM
 
 /**
  * Service for generating and sending daily heartbeat rate charts to Discord
@@ -16,14 +17,22 @@ export class DailyChartService {
     private cronJob: cron.ScheduledTask | null = null;
     private heartbeatService: HeartbeatService;
     private discordWebhookUrl: string | null;
-    private chartWidth = 900;
-    private chartHeight = 400;
+    private cronSchedule: string;
+    private intervalHours: number;
+    private chartWidth = 1200;
+    private chartHeight = 500;
     private FormDataConstructor!: typeof FormData;
     private BlobConstructor!: typeof Blob;
 
-    constructor(heartbeatService: HeartbeatService, discordWebhookUrl?: string) {
+    constructor(
+        heartbeatService: HeartbeatService,
+        discordWebhookUrl?: string,
+        cronSchedule?: string
+    ) {
         this.heartbeatService = heartbeatService;
         this.discordWebhookUrl = discordWebhookUrl || null;
+        this.cronSchedule = cronSchedule || DEFAULT_CRON_SCHEDULE;
+        this.intervalHours = DailyChartService.parseCronInterval(this.cronSchedule);
 
         // Fail-fast: Check for required Web APIs at startup
         if (!globalThis.FormData || !globalThis.Blob) {
@@ -36,25 +45,78 @@ export class DailyChartService {
     }
 
     /**
-     * Starts the daily chart generation cron job (runs at 5am daily)
+     * Parses a CRON expression to determine the time interval in hours
+     * Supports patterns like "0 5 * * *" (daily = 24h) and "0 *\/4 * * *" (every 4h)
+     * @param cronExpression - The CRON expression to parse
+     * @returns The interval in hours
+     */
+    public static parseCronInterval(cronExpression: string): number {
+        const parts = cronExpression.trim().split(/\s+/);
+
+        if (parts.length < 5) {
+            logger.warn(
+                `Invalid CRON expression: "${cronExpression}". Using default 24 hours interval.`
+            );
+            return 24;
+        }
+
+        const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+        // Check for hourly patterns: "0 */N * * *" or "0 N * * *"
+        const hourlyMatch = hour.match(/^\*\/(\d+)$/);
+        if (hourlyMatch) {
+            const hours = parseInt(hourlyMatch[1], 10);
+            logger.info(`Parsed CRON schedule: every ${hours} hour(s)`);
+            return hours;
+        }
+
+        // Check if it's a specific hour (daily pattern): "0 5 * * *"
+        if (hour.match(/^\d+$/) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+            logger.info('Parsed CRON schedule: daily (24 hours)');
+            return 24;
+        }
+
+        // Check for wildcard hour pattern: "0 * * * *" (every hour)
+        if (hour === '*') {
+            logger.info('Parsed CRON schedule: every hour');
+            return 1;
+        }
+
+        // Default to 24 hours if pattern is not recognized
+        logger.warn(
+            `Unsupported CRON pattern: "${cronExpression}". Using default 24 hours interval.`
+        );
+        return 24;
+    }
+
+    /**
+     * Starts the chart generation cron job with the configured schedule
      */
     public start(): void {
         if (!this.discordWebhookUrl) {
-            logger.info('Discord webhook URL not configured, daily chart service will not start');
+            logger.info('Discord webhook URL not configured, chart service will not start');
             return;
         }
 
         if (this.cronJob) {
-            logger.warn('Daily chart service is already running');
+            logger.warn('Chart service is already running');
             return;
         }
 
-        // Run at 5:00 AM every day
-        this.cronJob = cron.schedule('0 5 * * *', async () => {
+        this.cronJob = cron.schedule(this.cronSchedule, async () => {
             await this.generateAndSendChart();
         });
 
-        logger.info('Daily chart service started (scheduled for 5:00 AM daily)');
+        const scheduleDescription =
+            this.intervalHours === 24
+                ? 'daily'
+                : this.intervalHours === 1
+                  ? 'every hour'
+                  : `every ${this.intervalHours} hours`;
+
+        logger.info(
+            `Chart service started (schedule: ${this.cronSchedule}, ${scheduleDescription})`
+        );
     }
 
     /**
@@ -79,16 +141,18 @@ export class DailyChartService {
 
         let chartPath: string | undefined;
         try {
-            logger.info('Starting daily chart generation...');
+            logger.info('Starting chart generation...');
 
-            // Get heartbeat data from the last 24 hours
+            // Get heartbeat data for the configured time interval
             const endDate = new Date();
-            const startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000);
+            const startDate = new Date(endDate.getTime() - this.intervalHours * 60 * 60 * 1000);
 
             const heartbeats = await this.heartbeatService.getHeartbeatsInRange(startDate, endDate);
 
             if (heartbeats.length === 0) {
-                logger.warn('No heartbeat data available for the last 24 hours');
+                logger.warn(
+                    `No heartbeat data available for the last ${this.intervalHours} hour(s)`
+                );
                 return;
             }
 
@@ -137,7 +201,6 @@ export class DailyChartService {
             return date.toLocaleTimeString('fr-FR', {
                 hour: '2-digit',
                 minute: '2-digit',
-                second: '2-digit',
             });
         });
 
@@ -198,17 +261,28 @@ export class DailyChartService {
                 plugins: {
                     title: {
                         display: true,
-                        text: [
-                            WATERMARK,
-                            `Freebox Network Rate - Last 24 Hours (${new Date().toLocaleDateString('fr-FR')})`,
-                        ],
-                        color: '#ffffff',
+                        text: `Freebox Network Rate - Last ${this.intervalHours === 1 ? 'Hour' : `${this.intervalHours} Hours`} (${new Date().toLocaleDateString('en-US')})`,
+                        color: 'rgba(255, 255, 255, 0.9)',
                         font: {
-                            size: 18,
+                            size: 22,
+                            weight: 'bold',
                         },
                         padding: {
                             top: 10,
                             bottom: 20,
+                        },
+                    },
+                    subtitle: {
+                        display: true,
+                        text: WATERMARK,
+                        color: 'rgba(255, 255, 255, 0.4)',
+                        font: {
+                            size: 11,
+                            weight: 'normal',
+                        },
+                        padding: {
+                            top: 5,
+                            bottom: 5,
                         },
                     },
                     legend: {
@@ -283,8 +357,15 @@ export class DailyChartService {
         const blob = new this.BlobConstructor([imageBuffer], { type: 'image/png' });
         formData.append('file', blob, filename);
 
+        const timeDescription =
+            this.intervalHours === 24
+                ? 'Daily Report'
+                : this.intervalHours === 1
+                  ? 'Hourly Report'
+                  : `Report (Last ${this.intervalHours} Hours)`;
+
         const payload = {
-            content: '📊 **Rapport quotidien - Débit Freebox (24 dernières heures)**',
+            content: `📊 **Freebox Network Rate ${timeDescription}**`,
             embeds: [
                 {
                     color: 0x5865f2,
