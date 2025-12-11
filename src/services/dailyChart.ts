@@ -52,14 +52,15 @@ export class DailyChartService {
      * @returns The interval in hours
      */
     public static parseCronInterval(cronExpression: string): number {
+        const trimmedExpression = cronExpression?.trim();
         // Handle empty or whitespace-only expressions
-        if (!cronExpression || !cronExpression.trim()) {
+        if (!trimmedExpression) {
             logger.warn('Empty CRON expression provided. Using default 24 hours interval.');
             return 24;
         }
 
         try {
-            const interval = cronParser.CronExpressionParser.parse(cronExpression, {});
+            const interval = cronParser.CronExpressionParser.parse(trimmedExpression, {});
             const firstRun = interval.next().toDate();
             const secondRun = interval.next().toDate();
             const durationMs = secondRun.getTime() - firstRun.getTime();
@@ -81,7 +82,7 @@ export class DailyChartService {
             return durationHours;
         } catch (err) {
             logger.warn(
-                `Invalid or unsupported CRON expression: "${cronExpression}". Using default 24 hours interval. Error: ${(err as Error).message}`
+                `Invalid or unsupported CRON expression: "${trimmedExpression}". Using default 24 hours interval. Error: ${(err as Error).message}`
             );
             return 24;
         }
