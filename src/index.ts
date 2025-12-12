@@ -43,7 +43,11 @@ await import('./middleware/rawBodyCapture.js').then(({ registerRawBodyCapture })
 const notificationService = new NotificationService(fastify.log);
 const downtimeMonitor = new DowntimeMonitor(fastify.log, notificationService);
 const heartbeatService = new HeartbeatService();
-const dailyChartService = new DailyChartService(heartbeatService, process.env.DISCORD_WEBHOOK_URL);
+const dailyChartService = new DailyChartService(
+    heartbeatService,
+    process.env.DISCORD_WEBHOOK_URL,
+    process.env.CRON_SCHEDULE
+);
 
 /**
  * Decorate fastify instance with services

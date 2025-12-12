@@ -1,5 +1,6 @@
 import os from 'os';
 import cron from 'node-cron';
+import * as cronParser from 'cron-parser';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 import { ChartConfiguration } from 'chart.js';
 import fs from 'fs/promises';
@@ -8,6 +9,7 @@ import { logger } from '../utils/logger.js';
 import { HeartbeatService } from './heartbeat.js';
 
 const WATERMARK = 'github.com/teol/freebox-watcher';
+const DEFAULT_CRON_SCHEDULE = '0 5 * * *'; // Daily at 5:00 AM
 
 /**
  * Service for generating and sending daily heartbeat rate charts to Discord
@@ -16,14 +18,22 @@ export class DailyChartService {
     private cronJob: cron.ScheduledTask | null = null;
     private heartbeatService: HeartbeatService;
     private discordWebhookUrl: string | null;
-    private chartWidth = 900;
-    private chartHeight = 400;
+    private cronSchedule: string;
+    private intervalHours: number;
+    private chartWidth = 1200;
+    private chartHeight = 500;
     private FormDataConstructor!: typeof FormData;
     private BlobConstructor!: typeof Blob;
 
-    constructor(heartbeatService: HeartbeatService, discordWebhookUrl?: string) {
+    constructor(
+        heartbeatService: HeartbeatService,
+        discordWebhookUrl?: string,
+        cronSchedule?: string
+    ) {
         this.heartbeatService = heartbeatService;
         this.discordWebhookUrl = discordWebhookUrl || null;
+        this.cronSchedule = cronSchedule || DEFAULT_CRON_SCHEDULE;
+        this.intervalHours = DailyChartService.parseCronInterval(this.cronSchedule);
 
         // Fail-fast: Check for required Web APIs at startup
         if (!globalThis.FormData || !globalThis.Blob) {
@@ -36,25 +46,86 @@ export class DailyChartService {
     }
 
     /**
-     * Starts the daily chart generation cron job (runs at 5am daily)
+     * Parses a CRON expression to determine the time interval in hours
+     * Uses cron-parser to support a wide range of CRON patterns
+     * @param cronExpression - The CRON expression to parse
+     * @returns The interval in hours
+     */
+    public static parseCronInterval(cronExpression: string): number {
+        const trimmedExpression = cronExpression?.trim();
+        // Handle empty or whitespace-only expressions
+        if (!trimmedExpression) {
+            logger.warn('Empty CRON expression provided. Using default 24 hours interval.');
+            return 24;
+        }
+
+        try {
+            const interval = cronParser.CronExpressionParser.parse(trimmedExpression, {});
+            const firstRun = interval.next().toDate();
+            const secondRun = interval.next().toDate();
+            const durationMs = secondRun.getTime() - firstRun.getTime();
+
+            // Convert duration to hours, rounding to nearest hour for simplicity
+            const durationHours = Math.round(durationMs / (1000 * 60 * 60));
+
+            // Handle daily or longer intervals that might not be exact multiples of hours
+            if (durationHours >= 24) {
+                logger.info('Parsed CRON schedule: daily (24 hours)');
+                return 24; // Cap at 24 hours for a daily report scope
+            }
+            if (durationHours === 0) {
+                logger.info('Parsed CRON schedule: every hour');
+                return 1; // Minimum interval of 1 hour
+            }
+
+            logger.info(`Parsed CRON schedule: every ${durationHours} hour(s)`);
+            return durationHours;
+        } catch (err) {
+            logger.warn(
+                `Invalid or unsupported CRON expression: "${trimmedExpression}". Using default 24 hours interval. Error: ${(err as Error).message}`
+            );
+            return 24;
+        }
+    }
+
+    /**
+     * Gets a human-readable description of the interval
+     * @param context - The context for the description ('log' or 'discord')
+     * @returns A formatted description string
+     */
+    private getIntervalDescription(context: 'log' | 'discord'): string {
+        if (this.intervalHours === 24) {
+            return context === 'log' ? 'daily' : 'Daily Report';
+        }
+        if (this.intervalHours === 1) {
+            return context === 'log' ? 'every hour' : 'Hourly Report';
+        }
+        return context === 'log'
+            ? `every ${this.intervalHours} hours`
+            : `Report (Last ${this.intervalHours} Hours)`;
+    }
+
+    /**
+     * Starts the chart generation cron job with the configured schedule
      */
     public start(): void {
         if (!this.discordWebhookUrl) {
-            logger.info('Discord webhook URL not configured, daily chart service will not start');
+            logger.info('Discord webhook URL not configured, chart service will not start');
             return;
         }
 
         if (this.cronJob) {
-            logger.warn('Daily chart service is already running');
+            logger.warn('Chart service is already running');
             return;
         }
 
-        // Run at 5:00 AM every day
-        this.cronJob = cron.schedule('0 5 * * *', async () => {
+        this.cronJob = cron.schedule(this.cronSchedule, async () => {
             await this.generateAndSendChart();
         });
 
-        logger.info('Daily chart service started (scheduled for 5:00 AM daily)');
+        logger.info(
+            `Chart service started (schedule: ${this.cronSchedule}, ${this.getIntervalDescription('log')})`
+        );
     }
 
     /**
@@ -79,16 +150,18 @@ export class DailyChartService {
 
         let chartPath: string | undefined;
         try {
-            logger.info('Starting daily chart generation...');
+            logger.info('Starting chart generation...');
 
-            // Get heartbeat data from the last 24 hours
+            // Get heartbeat data for the configured time interval
             const endDate = new Date();
-            const startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000);
+            const startDate = new Date(endDate.getTime() - this.intervalHours * 60 * 60 * 1000);
 
             const heartbeats = await this.heartbeatService.getHeartbeatsInRange(startDate, endDate);
 
             if (heartbeats.length === 0) {
-                logger.warn('No heartbeat data available for the last 24 hours');
+                logger.warn(
+                    `No heartbeat data available for the last ${this.intervalHours} hour(s)`
+                );
                 return;
             }
 
@@ -137,7 +210,6 @@ export class DailyChartService {
             return date.toLocaleTimeString('fr-FR', {
                 hour: '2-digit',
                 minute: '2-digit',
-                second: '2-digit',
             });
         });
 
@@ -198,17 +270,28 @@ export class DailyChartService {
                 plugins: {
                     title: {
                         display: true,
-                        text: [
-                            WATERMARK,
-                            `Freebox Network Rate - Last 24 Hours (${new Date().toLocaleDateString('fr-FR')})`,
-                        ],
-                        color: '#ffffff',
+                        text: `Freebox Network Rate - Last ${this.intervalHours === 1 ? 'Hour' : `${this.intervalHours} Hours`} (${new Date().toLocaleDateString('en-US')})`,
+                        color: 'rgba(255, 255, 255, 0.9)',
                         font: {
-                            size: 18,
+                            size: 22,
+                            weight: 'bold',
                         },
                         padding: {
                             top: 10,
                             bottom: 20,
+                        },
+                    },
+                    subtitle: {
+                        display: true,
+                        text: WATERMARK,
+                        color: 'rgba(255, 255, 255, 0.4)',
+                        font: {
+                            size: 11,
+                            weight: 'normal',
+                        },
+                        padding: {
+                            top: 5,
+                            bottom: 5,
                         },
                     },
                     legend: {
@@ -284,7 +367,7 @@ export class DailyChartService {
         formData.append('file', blob, filename);
 
         const payload = {
-            content: '📊 **Rapport quotidien - Débit Freebox (24 dernières heures)**',
+            content: `📊 **Freebox Network Rate ${this.getIntervalDescription('discord')}**`,
             embeds: [
                 {
                     color: 0x5865f2,
