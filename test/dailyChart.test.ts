@@ -263,4 +263,62 @@ describe('DailyChartService', () => {
             global.fetch = originalFetch;
         }
     });
+
+    describe('parseCronInterval', () => {
+        it('should parse daily CRON pattern (0 5 * * *) as 24 hours', () => {
+            const result = DailyChartService.parseCronInterval('0 5 * * *');
+            assert.strictEqual(result, 24);
+        });
+
+        it('should parse hourly interval pattern (0 */4 * * *) as 4 hours', () => {
+            const result = DailyChartService.parseCronInterval('0 */4 * * *');
+            assert.strictEqual(result, 4);
+        });
+
+        it('should parse hourly interval pattern (0 */6 * * *) as 6 hours', () => {
+            const result = DailyChartService.parseCronInterval('0 */6 * * *');
+            assert.strictEqual(result, 6);
+        });
+
+        it('should parse hourly interval pattern (0 */2 * * *) as 2 hours', () => {
+            const result = DailyChartService.parseCronInterval('0 */2 * * *');
+            assert.strictEqual(result, 2);
+        });
+
+        it('should parse every hour pattern (0 * * * *) as 1 hour', () => {
+            const result = DailyChartService.parseCronInterval('0 * * * *');
+            assert.strictEqual(result, 1);
+        });
+
+        it('should parse any specific hour as 24 hours (daily)', () => {
+            const result = DailyChartService.parseCronInterval('0 10 * * *');
+            assert.strictEqual(result, 24);
+        });
+
+        it('should default to 24 hours for invalid CRON expression', () => {
+            const result = DailyChartService.parseCronInterval('invalid');
+            assert.strictEqual(result, 24);
+        });
+
+        it('should default to 24 hours for empty CRON expression', () => {
+            const result = DailyChartService.parseCronInterval('');
+            assert.strictEqual(result, 24);
+        });
+
+        it('should default to 24 hours for incomplete CRON expression', () => {
+            const result = DailyChartService.parseCronInterval('0 5');
+            assert.strictEqual(result, 24);
+        });
+
+        it('should default to 24 hours for unsupported CRON pattern', () => {
+            // Weekly pattern
+            const result = DailyChartService.parseCronInterval('0 5 * * 1');
+            assert.strictEqual(result, 24);
+        });
+
+        it('should handle CRON expression with extra whitespace', () => {
+            const result = DailyChartService.parseCronInterval('  0   */3   *   *   *  ');
+            assert.strictEqual(result, 3);
+        });
+    });
 });
