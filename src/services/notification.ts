@@ -128,17 +128,36 @@ export class NotificationService {
     }
 
     /**
+     * Format duration in a human-readable way, adapting to the duration length
+     */
+    private formatDuration(durationSeconds: number): string {
+        const days = Math.floor(durationSeconds / 86400);
+        const hours = Math.floor((durationSeconds % 86400) / 3600);
+        const minutes = Math.floor((durationSeconds % 3600) / 60);
+        const seconds = durationSeconds % 60;
+
+        const parts: string[] = [];
+
+        if (days > 0) {
+            parts.push(`${days}d`);
+        }
+        if (days > 0 || hours > 0) {
+            parts.push(`${hours}h`);
+        }
+        if (days > 0 || hours > 0 || minutes > 0) {
+            parts.push(`${minutes}m`);
+        }
+        parts.push(`${seconds}s`);
+
+        return parts.join(' ');
+    }
+
+    /**
      * Send recovery alert when service comes back online
      */
     async sendRecoveryAlert(downtimeId: number, startedAt: Date, endedAt: Date): Promise<void> {
         const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
-        const durationMinutes = Math.floor(durationSeconds / 60);
-        const remainingSeconds = durationSeconds % 60;
-
-        const durationText =
-            durationMinutes > 0
-                ? `${durationMinutes}m ${remainingSeconds}s`
-                : `${remainingSeconds}s`;
+        const durationText = this.formatDuration(durationSeconds);
 
         const message = [
             '✅ *Service Recovered*',
