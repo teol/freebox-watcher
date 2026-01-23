@@ -141,13 +141,15 @@ export class NotificationService {
         if (days > 0) {
             parts.push(`${days}d`);
         }
-        if (days > 0 || hours > 0) {
+        if (hours > 0) {
             parts.push(`${hours}h`);
         }
-        if (days > 0 || hours > 0 || minutes > 0) {
+        if (minutes > 0) {
             parts.push(`${minutes}m`);
         }
-        parts.push(`${seconds}s`);
+        if (seconds > 0 || parts.length === 0) {
+            parts.push(`${seconds}s`);
+        }
 
         return parts.join(' ');
     }
