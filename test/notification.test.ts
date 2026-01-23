@@ -157,4 +157,92 @@ describe('NotificationService', () => {
         assert.match(sendCalls[0].message, /over 30 minutes/);
         assert.deepStrictEqual(sendCalls[0].options, { parse_mode: 'Markdown' });
     });
+
+    describe('formatDuration', () => {
+        let service: NotificationService;
+
+        before(() => {
+            service = new NotificationService(fastify.log);
+        });
+
+        it('should format zero seconds', () => {
+            const result = (service as any).formatDuration(0);
+            assert.strictEqual(result, '0s');
+        });
+
+        it('should format seconds only (less than a minute)', () => {
+            const result = (service as any).formatDuration(45);
+            assert.strictEqual(result, '45s');
+        });
+
+        it('should format exactly 1 minute', () => {
+            const result = (service as any).formatDuration(60);
+            assert.strictEqual(result, '1m');
+        });
+
+        it('should format minutes and seconds', () => {
+            const result = (service as any).formatDuration(150); // 2m 30s
+            assert.strictEqual(result, '2m 30s');
+        });
+
+        it('should format minutes without seconds when seconds are zero', () => {
+            const result = (service as any).formatDuration(180); // 3m 0s
+            assert.strictEqual(result, '3m');
+        });
+
+        it('should format exactly 1 hour', () => {
+            const result = (service as any).formatDuration(3600);
+            assert.strictEqual(result, '1h');
+        });
+
+        it('should format hours and minutes', () => {
+            const result = (service as any).formatDuration(9000); // 2h 30m
+            assert.strictEqual(result, '2h 30m');
+        });
+
+        it('should format hours, minutes, and seconds', () => {
+            const result = (service as any).formatDuration(9015); // 2h 30m 15s
+            assert.strictEqual(result, '2h 30m 15s');
+        });
+
+        it('should format hours without minutes or seconds when both are zero', () => {
+            const result = (service as any).formatDuration(7200); // 2h 0m 0s
+            assert.strictEqual(result, '2h');
+        });
+
+        it('should format exactly 1 day', () => {
+            const result = (service as any).formatDuration(86400);
+            assert.strictEqual(result, '1d');
+        });
+
+        it('should format days and hours', () => {
+            const result = (service as any).formatDuration(97200); // 1d 3h
+            assert.strictEqual(result, '1d 3h');
+        });
+
+        it('should format days, hours, and minutes', () => {
+            const result = (service as any).formatDuration(97800); // 1d 3h 10m
+            assert.strictEqual(result, '1d 3h 10m');
+        });
+
+        it('should format days, hours, minutes, and seconds', () => {
+            const result = (service as any).formatDuration(97815); // 1d 3h 10m 15s
+            assert.strictEqual(result, '1d 3h 10m 15s');
+        });
+
+        it('should format multiple days without other units', () => {
+            const result = (service as any).formatDuration(259200); // 3d 0h 0m 0s
+            assert.strictEqual(result, '3d');
+        });
+
+        it('should format the example from the issue (21 days)', () => {
+            const result = (service as any).formatDuration(1868123); // 21d 14h 55m 23s
+            assert.strictEqual(result, '21d 14h 55m 23s');
+        });
+
+        it('should format days with only seconds (no hours or minutes)', () => {
+            const result = (service as any).formatDuration(86415); // 1d 0h 0m 15s
+            assert.strictEqual(result, '1d 15s');
+        });
+    });
 });
