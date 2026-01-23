@@ -1,6 +1,10 @@
 import TelegramBot from 'node-telegram-bot-api';
 import type { FastifyBaseLogger } from 'fastify';
 
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 3600;
+const SECONDS_PER_DAY = 86400;
+
 export interface DowntimeNotificationData {
     downtimeId: number;
     startedAt: Date;
@@ -131,10 +135,10 @@ export class NotificationService {
      * Format duration in a human-readable way, adapting to the duration length
      */
     private formatDuration(durationSeconds: number): string {
-        const days = Math.floor(durationSeconds / 86400);
-        const hours = Math.floor((durationSeconds % 86400) / 3600);
-        const minutes = Math.floor((durationSeconds % 3600) / 60);
-        const seconds = durationSeconds % 60;
+        const days = Math.floor(durationSeconds / SECONDS_PER_DAY);
+        const hours = Math.floor((durationSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
+        const minutes = Math.floor((durationSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+        const seconds = durationSeconds % SECONDS_PER_MINUTE;
 
         const parts: string[] = [];
 
