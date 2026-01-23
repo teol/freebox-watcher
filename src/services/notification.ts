@@ -138,7 +138,7 @@ export class NotificationService {
         const days = Math.floor(durationSeconds / SECONDS_PER_DAY);
         const hours = Math.floor((durationSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
         const minutes = Math.floor((durationSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
-        const seconds = durationSeconds % SECONDS_PER_MINUTE;
+        const seconds = Math.floor(durationSeconds % SECONDS_PER_MINUTE);
 
         const parts: string[] = [];
 
