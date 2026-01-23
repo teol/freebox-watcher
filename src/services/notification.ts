@@ -1,6 +1,10 @@
 import TelegramBot from 'node-telegram-bot-api';
 import type { FastifyBaseLogger } from 'fastify';
 
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 3600;
+const SECONDS_PER_DAY = 86400;
+
 export interface DowntimeNotificationData {
     downtimeId: number;
     startedAt: Date;
@@ -128,17 +132,38 @@ export class NotificationService {
     }
 
     /**
+     * Format duration in a human-readable way, adapting to the duration length
+     */
+    private formatDuration(durationSeconds: number): string {
+        const days = Math.floor(durationSeconds / SECONDS_PER_DAY);
+        const hours = Math.floor((durationSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
+        const minutes = Math.floor((durationSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+        const seconds = Math.floor(durationSeconds % SECONDS_PER_MINUTE);
+
+        const parts: string[] = [];
+
+        if (days > 0) {
+            parts.push(`${days}d`);
+        }
+        if (hours > 0) {
+            parts.push(`${hours}h`);
+        }
+        if (minutes > 0) {
+            parts.push(`${minutes}m`);
+        }
+        if (seconds > 0 || parts.length === 0) {
+            parts.push(`${seconds}s`);
+        }
+
+        return parts.join(' ');
+    }
+
+    /**
      * Send recovery alert when service comes back online
      */
     async sendRecoveryAlert(downtimeId: number, startedAt: Date, endedAt: Date): Promise<void> {
         const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
-        const durationMinutes = Math.floor(durationSeconds / 60);
-        const remainingSeconds = durationSeconds % 60;
-
-        const durationText =
-            durationMinutes > 0
-                ? `${durationMinutes}m ${remainingSeconds}s`
-                : `${remainingSeconds}s`;
+        const durationText = this.formatDuration(durationSeconds);
 
         const message = [
             '✅ *Service Recovered*',
