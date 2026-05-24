@@ -10,6 +10,7 @@ import { DailyChartService } from './dailyChart.js';
 
 const WATERMARK = 'github.com/teol/freebox-watcher';
 const DEFAULT_CRON_SCHEDULE = '0 5 * * *'; // Daily at 5:00 AM
+const DISCORD_WEBHOOK_TIMEOUT_MS = 30_000;
 
 /**
  * Service for generating and sending connected devices charts to Discord
@@ -278,8 +279,7 @@ export class DevicesChartService {
         const tempDir = path.join(os.tmpdir(), 'freebox-watcher');
         await fs.mkdir(tempDir, { recursive: true });
 
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const chartPath = path.join(tempDir, `devices-chart-${timestamp}.png`);
+        const chartPath = path.join(tempDir, `devices-chart-${globalThis.crypto.randomUUID()}.png`);
 
         await fs.writeFile(chartPath, imageBuffer);
         logger.info(`Devices chart image created: ${chartPath}`);
@@ -324,10 +324,19 @@ export class DevicesChartService {
 
         formData.append('payload_json', JSON.stringify(payload));
 
-        const response = await fetch(this.discordWebhookUrl, {
-            method: 'POST',
-            body: formData,
-        });
+        const abort = new AbortController();
+        const abortTimer = setTimeout(() => abort.abort(), DISCORD_WEBHOOK_TIMEOUT_MS);
+
+        let response: Response;
+        try {
+            response = await fetch(this.discordWebhookUrl, {
+                method: 'POST',
+                body: formData,
+                signal: abort.signal,
+            });
+        } finally {
+            clearTimeout(abortTimer);
+        }
 
         if (!response.ok) {
             const errorText = await response.text();

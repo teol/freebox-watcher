@@ -80,12 +80,13 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                 timestamp,
             });
 
-            // Send notifications for newly discovered devices (in parallel to avoid delaying the response)
+            // Fire-and-forget: do not await to avoid delaying the heartbeat response.
+            // NotificationService handles all errors internally.
             if (
                 newDevices.length > 0 &&
                 fastify.notificationService.isNewDeviceNotificationEnabled()
             ) {
-                await Promise.all(
+                void Promise.all(
                     newDevices.map((device) =>
                         fastify.notificationService.sendNewDeviceNotification(device)
                     )
