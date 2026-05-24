@@ -168,18 +168,22 @@ export class NotificationService {
     }
 
     /**
-     * Send a notification when a new (previously unseen) device joins the network
+     * Send a single notification listing all newly detected devices.
+     * Sending one aggregated message avoids notification storms and Telegram rate limiting.
      */
-    async sendNewDeviceNotification(device: ActiveDevice): Promise<void> {
-        const message = [
-            '🆕 *New Device Detected*',
-            '',
-            `Name: ${device.name}`,
-            `MAC: \`${device.mac}\``,
-            `Type: ${device.type}`,
-        ].join('\n');
+    async sendNewDevicesNotification(devices: ActiveDevice[]): Promise<void> {
+        if (devices.length === 0) {
+            return;
+        }
 
-        await this.sendMessage(message);
+        const title =
+            devices.length === 1
+                ? '🆕 *New Device Detected*'
+                : `🆕 *${devices.length} New Devices Detected*`;
+
+        const lines = devices.map((d) => `• ${d.name} — \`${d.mac}\` (${d.type})`);
+
+        await this.sendMessage([title, '', ...lines].join('\n'));
     }
 
     /**

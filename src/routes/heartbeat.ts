@@ -81,16 +81,13 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
             });
 
             // Fire-and-forget: do not await to avoid delaying the heartbeat response.
+            // A single aggregated notification is sent to avoid Telegram rate limiting.
             // NotificationService handles all errors internally.
             if (
                 newDevices.length > 0 &&
                 fastify.notificationService.isNewDeviceNotificationEnabled()
             ) {
-                void Promise.all(
-                    newDevices.map((device) =>
-                        fastify.notificationService.sendNewDeviceNotification(device)
-                    )
-                );
+                void fastify.notificationService.sendNewDevicesNotification(newDevices);
             }
 
             // Check if we need to end any active downtime

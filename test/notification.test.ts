@@ -72,7 +72,7 @@ describe('NotificationService', () => {
         assert.strictEqual(typeof service.sendDowntimeAlert, 'function');
         assert.strictEqual(typeof service.sendDowntimeConfirmedAlert, 'function');
         assert.strictEqual(typeof service.sendRecoveryAlert, 'function');
-        assert.strictEqual(typeof service.sendNewDeviceNotification, 'function');
+        assert.strictEqual(typeof service.sendNewDevicesNotification, 'function');
         assert.strictEqual(typeof service.isNewDeviceNotificationEnabled, 'function');
     });
 
@@ -134,11 +134,9 @@ describe('NotificationService', () => {
         });
 
         await assert.doesNotReject(async () => {
-            await service.sendNewDeviceNotification({
-                mac: 'AA:BB:CC:11:22:33',
-                name: 'MyPhone',
-                type: 'smartphone',
-            });
+            await service.sendNewDevicesNotification([
+                { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            ]);
         });
     });
 
@@ -198,8 +196,8 @@ describe('NotificationService', () => {
         assert.deepStrictEqual(sendCalls[0].options, { parse_mode: 'Markdown' });
     });
 
-    describe('sendNewDeviceNotification', () => {
-        it('should send a new device notification with device details', async () => {
+    describe('sendNewDevicesNotification', () => {
+        it('should send a single notification for one new device', async () => {
             const service = new NotificationService(fastify.log);
             const sendCalls: Array<{ chatId: string; message: string; options: unknown }> = [];
 
@@ -211,11 +209,9 @@ describe('NotificationService', () => {
                 },
             };
 
-            await service.sendNewDeviceNotification({
-                mac: 'AA:BB:CC:11:22:33',
-                name: 'MyPhone',
-                type: 'smartphone',
-            });
+            await service.sendNewDevicesNotification([
+                { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            ]);
 
             assert.strictEqual(sendCalls.length, 1);
             assert.strictEqual(sendCalls[0].chatId, 'chat-789');
@@ -226,15 +222,56 @@ describe('NotificationService', () => {
             assert.deepStrictEqual(sendCalls[0].options, { parse_mode: 'Markdown' });
         });
 
+        it('should send one aggregated notification for multiple new devices', async () => {
+            const service = new NotificationService(fastify.log);
+            const sendCalls: Array<{ chatId: string; message: string; options: unknown }> = [];
+
+            (service as any).enabled = true;
+            (service as any).chatId = 'chat-789';
+            (service as any).bot = {
+                sendMessage: async (chatId: string, message: string, options: unknown) => {
+                    sendCalls.push({ chatId, message, options });
+                },
+            };
+
+            await service.sendNewDevicesNotification([
+                { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+                { mac: 'DD:EE:FF:44:55:66', name: 'MyLaptop', type: 'laptop' },
+                { mac: '11:22:33:44:55:66', name: 'MyTV', type: 'tv' },
+            ]);
+
+            // Only one message sent regardless of the number of devices
+            assert.strictEqual(sendCalls.length, 1);
+            assert.match(sendCalls[0].message, /3 New Devices Detected/);
+            assert.match(sendCalls[0].message, /MyPhone/);
+            assert.match(sendCalls[0].message, /MyLaptop/);
+            assert.match(sendCalls[0].message, /MyTV/);
+        });
+
+        it('should send nothing for an empty device list', async () => {
+            const service = new NotificationService(fastify.log);
+            const sendCalls: Array<unknown>[] = [];
+
+            (service as any).enabled = true;
+            (service as any).chatId = 'chat-789';
+            (service as any).bot = {
+                sendMessage: async (...args: unknown[]) => {
+                    sendCalls.push(args);
+                },
+            };
+
+            await service.sendNewDevicesNotification([]);
+
+            assert.strictEqual(sendCalls.length, 0);
+        });
+
         it('should not throw when sending new device notification while disabled', async () => {
             const service = new NotificationService(fastify.log);
 
             await assert.doesNotReject(async () => {
-                await service.sendNewDeviceNotification({
-                    mac: 'AA:BB:CC:11:22:33',
-                    name: 'MyPhone',
-                    type: 'smartphone',
-                });
+                await service.sendNewDevicesNotification([
+                    { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+                ]);
             });
         });
     });
