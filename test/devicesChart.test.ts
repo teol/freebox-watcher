@@ -1,5 +1,6 @@
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { BaseChartService } from '../src/services/baseChart.js';
 import { DevicesChartService } from '../src/services/devicesChart.js';
 import { HeartbeatService } from '../src/services/heartbeat.js';
 import fs from 'fs/promises';
@@ -87,11 +88,13 @@ describe('DevicesChartService', () => {
             true
         );
         assert.ok(service);
+        assert.ok(service instanceof BaseChartService);
     });
 
     it('should initialize without webhook URL', () => {
         const service = new DevicesChartService(heartbeatService);
         assert.ok(service);
+        assert.ok(service instanceof BaseChartService);
     });
 
     it('should not start when disabled', () => {

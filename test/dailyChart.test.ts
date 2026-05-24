@@ -1,5 +1,6 @@
 import { describe, it, before, after, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { BaseChartService } from '../src/services/baseChart.js';
 import { DailyChartService } from '../src/services/dailyChart.js';
 import { HeartbeatService } from '../src/services/heartbeat.js';
 import fs from 'fs/promises';
@@ -18,12 +19,14 @@ describe('DailyChartService', () => {
         const service = new DailyChartService(heartbeatService, webhookUrl);
 
         assert.ok(service);
+        assert.ok(service instanceof BaseChartService);
     });
 
     it('should initialize without Discord webhook URL', () => {
         const service = new DailyChartService(heartbeatService);
 
         assert.ok(service);
+        assert.ok(service instanceof BaseChartService);
     });
 
     it('should not start when Discord webhook URL is not configured', () => {
@@ -291,61 +294,61 @@ describe('DailyChartService', () => {
         }
     });
 
+    // parseCronInterval lives on BaseChartService and is inherited by DailyChartService.
+    // Tests call it via BaseChartService directly; the DailyChartService.parseCronInterval
+    // alias is verified by a dedicated test below.
     describe('parseCronInterval', () => {
         it('should parse daily CRON pattern (0 5 * * *) as 24 hours', () => {
-            const result = DailyChartService.parseCronInterval('0 5 * * *');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 5 * * *'), 24);
         });
 
         it('should parse hourly interval pattern (0 */4 * * *) as 4 hours', () => {
-            const result = DailyChartService.parseCronInterval('0 */4 * * *');
-            assert.strictEqual(result, 4);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 */4 * * *'), 4);
         });
 
         it('should parse hourly interval pattern (0 */6 * * *) as 6 hours', () => {
-            const result = DailyChartService.parseCronInterval('0 */6 * * *');
-            assert.strictEqual(result, 6);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 */6 * * *'), 6);
         });
 
         it('should parse hourly interval pattern (0 */2 * * *) as 2 hours', () => {
-            const result = DailyChartService.parseCronInterval('0 */2 * * *');
-            assert.strictEqual(result, 2);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 */2 * * *'), 2);
         });
 
         it('should parse every hour pattern (0 * * * *) as 1 hour', () => {
-            const result = DailyChartService.parseCronInterval('0 * * * *');
-            assert.strictEqual(result, 1);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 * * * *'), 1);
         });
 
         it('should parse any specific hour as 24 hours (daily)', () => {
-            const result = DailyChartService.parseCronInterval('0 10 * * *');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 10 * * *'), 24);
         });
 
         it('should default to 24 hours for invalid CRON expression', () => {
-            const result = DailyChartService.parseCronInterval('invalid');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('invalid'), 24);
         });
 
         it('should default to 24 hours for empty CRON expression', () => {
-            const result = DailyChartService.parseCronInterval('');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval(''), 24);
         });
 
         it('should default to 24 hours for incomplete CRON expression', () => {
-            const result = DailyChartService.parseCronInterval('0 5');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 5'), 24);
         });
 
         it('should default to 24 hours for unsupported CRON pattern', () => {
             // Weekly pattern
-            const result = DailyChartService.parseCronInterval('0 5 * * 1');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 5 * * 1'), 24);
         });
 
         it('should handle CRON expression with extra whitespace', () => {
-            const result = DailyChartService.parseCronInterval('  0   */3   *   *   *  ');
-            assert.strictEqual(result, 3);
+            assert.strictEqual(BaseChartService.parseCronInterval('  0   */3   *   *   *  '), 3);
+        });
+
+        it('should be accessible on DailyChartService via static inheritance', () => {
+            // Verify the static method is reachable on the subclass for backwards compatibility
+            assert.strictEqual(
+                DailyChartService.parseCronInterval,
+                BaseChartService.parseCronInterval
+            );
         });
     });
 });
