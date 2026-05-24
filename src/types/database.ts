@@ -24,6 +24,7 @@ export interface HeartbeatsTable {
     temp_switch: number | null;
     fan_rpm: number | null;
     uptime: number | null;
+    active_devices: string | null;
     metadata: string | null;
 }
 
@@ -51,8 +52,32 @@ export interface HeartbeatsInsert {
     temp_switch?: number | null;
     fan_rpm?: number | null;
     uptime?: number | null;
+    active_devices?: string | null;
     metadata?: string | null;
     received_at?: Date;
+}
+
+/**
+ * Devices table schema (registry of known LAN devices, deduplicated by MAC)
+ */
+export interface DevicesTable {
+    id: number;
+    mac: string;
+    name: string;
+    type: string;
+    first_seen_at: Date;
+    last_seen_at: Date;
+}
+
+/**
+ * Insert type for devices
+ */
+export interface DevicesInsert {
+    mac: string;
+    name: string;
+    type: string;
+    first_seen_at: Date;
+    last_seen_at: Date;
 }
 
 /**

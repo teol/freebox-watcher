@@ -36,6 +36,19 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                     bytes_up: { type: ['number', 'null'] },
                     connected_devices_total: { type: ['integer', 'null'] },
                     connected_devices_wifi: { type: ['integer', 'null'] },
+                    active_devices: {
+                        type: ['array', 'null'],
+                        items: {
+                            type: 'object',
+                            required: ['mac', 'name', 'type'],
+                            properties: {
+                                mac: { type: 'string' },
+                                name: { type: 'string' },
+                                type: { type: 'string' },
+                            },
+                            additionalProperties: false,
+                        },
+                    },
                     sfp_pwr_rx_dbm: { type: ['number', 'null'] },
                     sfp_pwr_tx_dbm: { type: ['number', 'null'] },
                     temp_cpu: { type: ['integer', 'null'] },

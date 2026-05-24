@@ -2,7 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { heartbeatRoutes } from '../src/routes/heartbeat.js';
-import { type HeartbeatInput } from '../src/services/heartbeat.js';
+import { type HeartbeatInput, type ActiveDevice } from '../src/services/heartbeat.js';
 import { NotificationService } from '../src/services/notification.js';
 import { DowntimeMonitor } from '../src/services/downtimeMonitor.js';
 import { registerRawBodyCapture } from '../src/middleware/rawBodyCapture.js';
@@ -246,5 +246,52 @@ describe('HeartbeatService', () => {
         assert.strictEqual(legacyPayload.sfp_pwr_rx_dbm, undefined);
         assert.strictEqual(legacyPayload.temp_cpu, undefined);
         assert.strictEqual(legacyPayload.uptime, undefined);
+        assert.strictEqual(legacyPayload.active_devices, undefined);
+    });
+
+    it('should accept active_devices array with valid device entries', () => {
+        const devices: ActiveDevice[] = [
+            { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            { mac: 'DD:EE:FF:44:55:66', name: 'MyLaptop', type: 'laptop' },
+            { mac: '', name: 'UnknownDevice', type: 'unknown' },
+        ];
+
+        const payload: HeartbeatInput = {
+            connection_state: 'up',
+            timestamp: new Date().toISOString(),
+            connected_devices_total: 3,
+            active_devices: devices,
+        };
+
+        assert.ok(Array.isArray(payload.active_devices));
+        assert.strictEqual(payload.active_devices?.length, 3);
+        assert.strictEqual(payload.active_devices?.[0].mac, 'AA:BB:CC:11:22:33');
+        assert.strictEqual(payload.active_devices?.[0].type, 'smartphone');
+        // Device with empty MAC is valid in payload (skipped at upsert time)
+        assert.strictEqual(payload.active_devices?.[2].mac, '');
+    });
+
+    it('should accept null active_devices when LAN API is unavailable', () => {
+        const payload: HeartbeatInput = {
+            connection_state: 'up',
+            timestamp: new Date().toISOString(),
+            connected_devices_total: null,
+            active_devices: null,
+        };
+
+        assert.strictEqual(payload.active_devices, null);
+    });
+
+    it('should filter out devices with empty MAC for registry upsert', () => {
+        const devices: ActiveDevice[] = [
+            { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            { mac: '', name: 'NoMacDevice', type: 'unknown' },
+            { mac: 'DD:EE:FF:44:55:66', name: 'MyLaptop', type: 'laptop' },
+        ];
+
+        const devicesWithMac = devices.filter((d) => d.mac !== '');
+
+        assert.strictEqual(devicesWithMac.length, 2);
+        assert.ok(devicesWithMac.every((d) => d.mac !== ''));
     });
 });

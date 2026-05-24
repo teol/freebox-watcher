@@ -1,5 +1,16 @@
 import { db } from '../db/config.js';
-import type { HeartbeatsTable, HeartbeatsInsert } from '../types/database.js';
+import type {
+    HeartbeatsTable,
+    HeartbeatsInsert,
+    DevicesTable,
+    DevicesInsert,
+} from '../types/database.js';
+
+export interface ActiveDevice {
+    mac: string;
+    name: string;
+    type: string;
+}
 
 export interface HeartbeatRecord {
     id: number;
@@ -24,6 +35,7 @@ export interface HeartbeatRecord {
     temp_switch: number | null;
     fan_rpm: number | null;
     uptime: number | null;
+    active_devices: ActiveDevice[] | null;
     metadata: Record<string, unknown> | null;
 }
 
@@ -48,6 +60,7 @@ export interface HeartbeatInput {
     temp_switch?: number | null;
     fan_rpm?: number | null;
     uptime?: number | null;
+    active_devices?: ActiveDevice[] | null;
     [key: string]: unknown;
 }
 
@@ -82,6 +95,7 @@ export class HeartbeatService {
             temp_switch,
             fan_rpm,
             uptime,
+            active_devices,
             ...additionalFields
         } = heartbeatData;
 
@@ -89,6 +103,8 @@ export class HeartbeatService {
         const metadata = Object.fromEntries(
             Object.entries(additionalFields).filter(([, value]) => value !== undefined)
         );
+
+        const activeDevicesList = active_devices ?? null;
 
         const insertData: HeartbeatsInsert = {
             status: connection_state,
@@ -111,10 +127,31 @@ export class HeartbeatService {
             temp_switch: temp_switch ?? null,
             fan_rpm: fan_rpm ?? null,
             uptime: uptime ?? null,
+            active_devices: activeDevicesList ? JSON.stringify(activeDevicesList) : null,
             metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
         };
 
         const [id] = await db<HeartbeatsTable>('heartbeats').insert(insertData);
+
+        // Upsert devices with a non-empty MAC into the devices registry
+        const devicesWithMac = (activeDevicesList ?? []).filter((d) => d.mac !== '');
+        if (devicesWithMac.length > 0) {
+            const now = new Date();
+            await db<DevicesTable>('devices')
+                .insert(
+                    devicesWithMac.map(
+                        (device): DevicesInsert => ({
+                            mac: device.mac,
+                            name: device.name,
+                            type: device.type,
+                            first_seen_at: now,
+                            last_seen_at: now,
+                        })
+                    )
+                )
+                .onConflict('mac')
+                .merge(['name', 'type', 'last_seen_at']);
+        }
 
         return id as number;
     }
@@ -134,6 +171,9 @@ export class HeartbeatService {
 
         return {
             ...heartbeat,
+            active_devices: heartbeat.active_devices
+                ? (JSON.parse(heartbeat.active_devices) as ActiveDevice[])
+                : null,
             metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
         };
     }
@@ -169,6 +209,9 @@ export class HeartbeatService {
 
         return heartbeats.map((heartbeat) => ({
             ...heartbeat,
+            active_devices: heartbeat.active_devices
+                ? (JSON.parse(heartbeat.active_devices) as ActiveDevice[])
+                : null,
             metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
         }));
     }

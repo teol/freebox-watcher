@@ -138,6 +138,7 @@ describe('DailyChartService', () => {
                 temp_switch: null,
                 fan_rpm: null,
                 uptime: null,
+                active_devices: null,
                 metadata: null,
             },
         ];
@@ -213,6 +214,7 @@ describe('DailyChartService', () => {
                 temp_switch: null,
                 fan_rpm: null,
                 uptime: null,
+                active_devices: null,
                 metadata: null,
             },
             {
@@ -238,6 +240,7 @@ describe('DailyChartService', () => {
                 temp_switch: null,
                 fan_rpm: null,
                 uptime: null,
+                active_devices: null,
                 metadata: null,
             },
         ];
