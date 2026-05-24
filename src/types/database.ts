@@ -16,6 +16,15 @@ export interface HeartbeatsTable {
     rate_up: number | null;
     bytes_down: number | null;
     bytes_up: number | null;
+    connected_devices_total: number | null;
+    connected_devices_wifi: number | null;
+    sfp_pwr_rx_dbm: number | null;
+    sfp_pwr_tx_dbm: number | null;
+    temp_cpu: number | null;
+    temp_switch: number | null;
+    fan_rpm: number | null;
+    uptime: number | null;
+    active_devices: string | null;
     metadata: string | null;
 }
 
@@ -35,8 +44,40 @@ export interface HeartbeatsInsert {
     rate_up?: number | null;
     bytes_down?: number | null;
     bytes_up?: number | null;
+    connected_devices_total?: number | null;
+    connected_devices_wifi?: number | null;
+    sfp_pwr_rx_dbm?: number | null;
+    sfp_pwr_tx_dbm?: number | null;
+    temp_cpu?: number | null;
+    temp_switch?: number | null;
+    fan_rpm?: number | null;
+    uptime?: number | null;
+    active_devices?: string | null;
     metadata?: string | null;
     received_at?: Date;
+}
+
+/**
+ * Devices table schema (registry of known LAN devices, deduplicated by MAC)
+ */
+export interface DevicesTable {
+    id: number;
+    mac: string;
+    name: string;
+    type: string;
+    first_seen_at: Date;
+    last_seen_at: Date;
+}
+
+/**
+ * Insert type for devices
+ */
+export interface DevicesInsert {
+    mac: string;
+    name: string;
+    type: string;
+    first_seen_at: Date;
+    last_seen_at: Date;
 }
 
 /**
