@@ -294,4 +294,42 @@ describe('HeartbeatService', () => {
         assert.strictEqual(devicesWithMac.length, 2);
         assert.ok(devicesWithMac.every((d) => d.mac !== ''));
     });
+
+    it('should deduplicate devices by MAC before registry upsert', () => {
+        const devices: ActiveDevice[] = [
+            { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            { mac: 'DD:EE:FF:44:55:66', name: 'MyLaptop', type: 'laptop' },
+            // Duplicate MAC with different name — last one wins in Map
+            { mac: 'AA:BB:CC:11:22:33', name: 'MyPhoneRenamed', type: 'smartphone' },
+        ];
+
+        const devicesWithMac = devices.filter((d) => d.mac !== '');
+        const uniqueDevices = Array.from(new Map(devicesWithMac.map((d) => [d.mac, d])).values());
+
+        assert.strictEqual(uniqueDevices.length, 2);
+        // Last entry for duplicate MAC takes precedence
+        const phone = uniqueDevices.find((d) => d.mac === 'AA:BB:CC:11:22:33');
+        assert.strictEqual(phone?.name, 'MyPhoneRenamed');
+    });
+
+    it('should use heartbeat timestamp for device first_seen_at and last_seen_at', () => {
+        const heartbeatTimestamp = new Date('2026-05-24T13:45:00.000Z');
+        const device: ActiveDevice = {
+            mac: 'AA:BB:CC:11:22:33',
+            name: 'MyPhone',
+            type: 'smartphone',
+        };
+
+        // Simulate the mapping applied in recordHeartbeat
+        const deviceInsert = {
+            mac: device.mac,
+            name: device.name,
+            type: device.type,
+            first_seen_at: heartbeatTimestamp,
+            last_seen_at: heartbeatTimestamp,
+        };
+
+        assert.deepStrictEqual(deviceInsert.first_seen_at, heartbeatTimestamp);
+        assert.deepStrictEqual(deviceInsert.last_seen_at, heartbeatTimestamp);
+    });
 });

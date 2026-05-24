@@ -131,29 +131,36 @@ export class HeartbeatService {
             metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
         };
 
-        const [id] = await db<HeartbeatsTable>('heartbeats').insert(insertData);
+        return await db.transaction(async (trx) => {
+            const [id] = await trx<HeartbeatsTable>('heartbeats').insert(insertData);
 
-        // Upsert devices with a non-empty MAC into the devices registry
-        const devicesWithMac = (activeDevicesList ?? []).filter((d) => d.mac !== '');
-        if (devicesWithMac.length > 0) {
-            const now = new Date();
-            await db<DevicesTable>('devices')
-                .insert(
-                    devicesWithMac.map(
-                        (device): DevicesInsert => ({
-                            mac: device.mac,
-                            name: device.name,
-                            type: device.type,
-                            first_seen_at: now,
-                            last_seen_at: now,
-                        })
+            // Upsert devices with a non-empty MAC into the devices registry
+            const devicesWithMac = (activeDevicesList ?? []).filter((d) => d.mac !== '');
+            if (devicesWithMac.length > 0) {
+                // Deduplicate by MAC — the Freebox API should not produce duplicates,
+                // but guard against it to avoid batch insert errors
+                const uniqueDevices = Array.from(
+                    new Map(devicesWithMac.map((d) => [d.mac, d])).values()
+                );
+
+                await trx<DevicesTable>('devices')
+                    .insert(
+                        uniqueDevices.map(
+                            (device): DevicesInsert => ({
+                                mac: device.mac,
+                                name: device.name,
+                                type: device.type,
+                                first_seen_at: insertData.timestamp,
+                                last_seen_at: insertData.timestamp,
+                            })
+                        )
                     )
-                )
-                .onConflict('mac')
-                .merge(['name', 'type', 'last_seen_at']);
-        }
+                    .onConflict('mac')
+                    .merge(['name', 'type', 'last_seen_at']);
+            }
 
-        return id as number;
+            return id as number;
+        });
     }
 
     /**
