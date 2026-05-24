@@ -42,9 +42,9 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                             type: 'object',
                             required: ['mac', 'name', 'type'],
                             properties: {
-                                mac: { type: 'string' },
-                                name: { type: 'string' },
-                                type: { type: 'string' },
+                                mac: { type: 'string', maxLength: 17 },
+                                name: { type: 'string', maxLength: 255 },
+                                type: { type: 'string', maxLength: 50 },
                             },
                             additionalProperties: false,
                         },
