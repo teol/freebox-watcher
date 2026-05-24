@@ -7,6 +7,7 @@ import { NotificationService } from './services/notification.js';
 import { DowntimeMonitor } from './services/downtimeMonitor.js';
 import { HeartbeatService } from './services/heartbeat.js';
 import { DailyChartService } from './services/dailyChart.js';
+import { DevicesChartService } from './services/devicesChart.js';
 import { getLoggerOptions } from './utils/logger.js';
 import { API_PREFIX } from './constants/api.js';
 
@@ -48,6 +49,12 @@ const dailyChartService = new DailyChartService(
     process.env.DISCORD_WEBHOOK_URL,
     process.env.CRON_SCHEDULE
 );
+const devicesChartService = new DevicesChartService(
+    heartbeatService,
+    process.env.DISCORD_WEBHOOK_URL,
+    process.env.DEVICES_CRON_SCHEDULE,
+    process.env.DEVICES_CHART_ENABLED === 'true'
+);
 
 /**
  * Decorate fastify instance with services
@@ -55,6 +62,7 @@ const dailyChartService = new DailyChartService(
 fastify.decorate('notificationService', notificationService);
 fastify.decorate('downtimeMonitor', downtimeMonitor);
 fastify.decorate('dailyChartService', dailyChartService);
+fastify.decorate('devicesChartService', devicesChartService);
 
 /**
  * Register routes
@@ -95,6 +103,9 @@ async function start(): Promise<void> {
         // Start daily chart service
         fastify.dailyChartService.start();
 
+        // Start devices chart service
+        fastify.devicesChartService.start();
+
         // Send startup notification
         await fastify.notificationService.sendStartupNotification();
     } catch (error) {
@@ -115,6 +126,9 @@ async function shutdown(signal: string): Promise<void> {
 
         // Stop daily chart service
         fastify.dailyChartService.stop();
+
+        // Stop devices chart service
+        fastify.devicesChartService.stop();
 
         await fastify.close();
         await closeConnection();

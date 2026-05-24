@@ -75,10 +75,20 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
             }
 
             // Record the heartbeat (passes entire body to service)
-            const id = await heartbeatService.recordHeartbeat({
+            const { id, newDevices } = await heartbeatService.recordHeartbeat({
                 ...heartbeatData,
                 timestamp,
             });
+
+            // Send notifications for newly discovered devices
+            if (
+                newDevices.length > 0 &&
+                fastify.notificationService.isNewDeviceNotificationEnabled()
+            ) {
+                for (const device of newDevices) {
+                    await fastify.notificationService.sendNewDeviceNotification(device);
+                }
+            }
 
             // Check if we need to end any active downtime
             const activeDowntime = await downtimeService.getActiveDowntimeEvent();

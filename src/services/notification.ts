@@ -1,5 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import type { FastifyBaseLogger } from 'fastify';
+import type { ActiveDevice } from './heartbeat.js';
 
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
@@ -53,6 +54,14 @@ export class NotificationService {
      */
     isEnabled(): boolean {
         return this.enabled;
+    }
+
+    /**
+     * Check if new device notifications are enabled.
+     * Requires Telegram to be configured and NEW_DEVICE_NOTIFICATION_ENABLED != 'false'.
+     */
+    isNewDeviceNotificationEnabled(): boolean {
+        return this.enabled && process.env.NEW_DEVICE_NOTIFICATION_ENABLED !== 'false';
     }
 
     /**
@@ -156,6 +165,21 @@ export class NotificationService {
         }
 
         return parts.join(' ');
+    }
+
+    /**
+     * Send a notification when a new (previously unseen) device joins the network
+     */
+    async sendNewDeviceNotification(device: ActiveDevice): Promise<void> {
+        const message = [
+            '🆕 *New Device Detected*',
+            '',
+            `Name: ${device.name}`,
+            `MAC: \`${device.mac}\``,
+            `Type: ${device.type}`,
+        ].join('\n');
+
+        await this.sendMessage(message);
     }
 
     /**
