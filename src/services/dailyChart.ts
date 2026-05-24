@@ -22,6 +22,7 @@ export class DailyChartService {
     private intervalHours: number;
     private chartWidth = 1200;
     private chartHeight = 500;
+    private canvasRenderer: ChartJSNodeCanvas;
     private FormDataConstructor!: typeof FormData;
     private BlobConstructor!: typeof Blob;
 
@@ -43,6 +44,12 @@ export class DailyChartService {
         }
         this.FormDataConstructor = globalThis.FormData;
         this.BlobConstructor = globalThis.Blob;
+
+        this.canvasRenderer = new ChartJSNodeCanvas({
+            width: this.chartWidth,
+            height: this.chartHeight,
+            backgroundColour: '#2c2f33',
+        });
     }
 
     /**
@@ -198,12 +205,6 @@ export class DailyChartService {
     private async createChartImage(
         heartbeats: Array<{ timestamp: Date; rate_down: number | null; rate_up: number | null }>
     ): Promise<string> {
-        const canvasRenderService = new ChartJSNodeCanvas({
-            width: this.chartWidth,
-            height: this.chartHeight,
-            backgroundColour: '#2c2f33',
-        });
-
         // Prepare data
         const labels = heartbeats.map((h) => {
             const date = new Date(h.timestamp);
@@ -335,7 +336,7 @@ export class DailyChartService {
             },
         };
 
-        const imageBuffer = await canvasRenderService.renderToBuffer(configuration);
+        const imageBuffer = await this.canvasRenderer.renderToBuffer(configuration);
 
         // Save to temporary file in OS temp directory
         const tempDir = path.join(os.tmpdir(), 'freebox-watcher');

@@ -80,14 +80,16 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                 timestamp,
             });
 
-            // Send notifications for newly discovered devices
+            // Send notifications for newly discovered devices (in parallel to avoid delaying the response)
             if (
                 newDevices.length > 0 &&
                 fastify.notificationService.isNewDeviceNotificationEnabled()
             ) {
-                for (const device of newDevices) {
-                    await fastify.notificationService.sendNewDeviceNotification(device);
-                }
+                await Promise.all(
+                    newDevices.map((device) =>
+                        fastify.notificationService.sendNewDeviceNotification(device)
+                    )
+                );
             }
 
             // Check if we need to end any active downtime

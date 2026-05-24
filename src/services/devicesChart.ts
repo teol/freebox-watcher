@@ -23,6 +23,7 @@ export class DevicesChartService {
     private enabled: boolean;
     private chartWidth = 1200;
     private chartHeight = 500;
+    private canvasRenderer: ChartJSNodeCanvas;
     private FormDataConstructor!: typeof FormData;
     private BlobConstructor!: typeof Blob;
 
@@ -46,6 +47,12 @@ export class DevicesChartService {
         }
         this.FormDataConstructor = globalThis.FormData;
         this.BlobConstructor = globalThis.Blob;
+
+        this.canvasRenderer = new ChartJSNodeCanvas({
+            width: this.chartWidth,
+            height: this.chartHeight,
+            backgroundColour: '#2c2f33',
+        });
     }
 
     /**
@@ -119,7 +126,7 @@ export class DevicesChartService {
                 return;
             }
 
-            chartPath = await this.createChartImage(heartbeats);
+            chartPath = await this.createChartImage(heartbeats, endDate);
             await this.sendToDiscord(chartPath);
 
             logger.info('Devices chart generated and sent successfully');
@@ -150,14 +157,9 @@ export class DevicesChartService {
             timestamp: Date;
             connected_devices_total: number | null;
             connected_devices_wifi: number | null;
-        }>
+        }>,
+        endDate: Date
     ): Promise<string> {
-        const canvasRenderService = new ChartJSNodeCanvas({
-            width: this.chartWidth,
-            height: this.chartHeight,
-            backgroundColour: '#2c2f33',
-        });
-
         const labels = heartbeats.map((h) => {
             const date = new Date(h.timestamp);
             return date.toLocaleTimeString('fr-FR', {
@@ -170,6 +172,7 @@ export class DevicesChartService {
         const wifiData = heartbeats.map((h) => h.connected_devices_wifi ?? null);
 
         const intervalLabel = this.intervalHours === 1 ? 'Hour' : `${this.intervalHours} Hours`;
+        const dateLabel = endDate.toLocaleDateString('fr-FR');
 
         const configuration: ChartConfiguration = {
             type: 'line',
@@ -203,7 +206,7 @@ export class DevicesChartService {
                 plugins: {
                     title: {
                         display: true,
-                        text: `Freebox Connected Devices - Last ${intervalLabel} (${new Date().toLocaleDateString('en-US')})`,
+                        text: `Freebox Connected Devices - Last ${intervalLabel} (${dateLabel})`,
                         color: 'rgba(255, 255, 255, 0.9)',
                         font: {
                             size: 22,
@@ -270,7 +273,7 @@ export class DevicesChartService {
             },
         };
 
-        const imageBuffer = await canvasRenderService.renderToBuffer(configuration);
+        const imageBuffer = await this.canvasRenderer.renderToBuffer(configuration);
 
         const tempDir = path.join(os.tmpdir(), 'freebox-watcher');
         await fs.mkdir(tempDir, { recursive: true });
