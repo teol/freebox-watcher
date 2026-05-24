@@ -179,4 +179,72 @@ describe('HeartbeatService', () => {
         assert.ok(dataWithAdditionalFields.bandwidth_down);
         assert.strictEqual(dataWithoutAdditionalFields.ipv4, undefined);
     });
+
+    it('should accept new payload fields (connected devices, FTTH optics, system health)', () => {
+        const fullPayload: HeartbeatInput = {
+            connection_state: 'up',
+            timestamp: new Date().toISOString(),
+            ipv4: '82.67.197.112',
+            ipv6: '2a01:e0a:de7:a4a0::1',
+            media_state: 'ftth',
+            connection_type: 'ethernet',
+            bandwidth_down: 10000000000,
+            bandwidth_up: 900000000,
+            rate_down: 4734,
+            rate_up: 3461,
+            bytes_down: 1142257499691,
+            bytes_up: 149819666255,
+            connected_devices_total: 4,
+            connected_devices_wifi: 3,
+            sfp_pwr_rx_dbm: -19.17,
+            sfp_pwr_tx_dbm: 2.69,
+            temp_cpu: 74,
+            temp_switch: 45,
+            fan_rpm: 1441,
+            uptime: 7189324,
+        };
+
+        assert.strictEqual(fullPayload.connected_devices_total, 4);
+        assert.strictEqual(fullPayload.connected_devices_wifi, 3);
+        assert.strictEqual(fullPayload.sfp_pwr_rx_dbm, -19.17);
+        assert.strictEqual(fullPayload.sfp_pwr_tx_dbm, 2.69);
+        assert.strictEqual(fullPayload.temp_cpu, 74);
+        assert.strictEqual(fullPayload.temp_switch, 45);
+        assert.strictEqual(fullPayload.fan_rpm, 1441);
+        assert.strictEqual(fullPayload.uptime, 7189324);
+    });
+
+    it('should accept null values for new optional fields (degraded mode)', () => {
+        const degradedPayload: HeartbeatInput = {
+            connection_state: 'up',
+            timestamp: new Date().toISOString(),
+            connected_devices_total: 4,
+            connected_devices_wifi: 3,
+            sfp_pwr_rx_dbm: null,
+            sfp_pwr_tx_dbm: null,
+            temp_cpu: null,
+            temp_switch: null,
+            fan_rpm: null,
+            uptime: null,
+        };
+
+        assert.strictEqual(degradedPayload.sfp_pwr_rx_dbm, null);
+        assert.strictEqual(degradedPayload.temp_cpu, null);
+        assert.strictEqual(degradedPayload.uptime, null);
+    });
+
+    it('should accept heartbeat without new fields (backwards compatibility)', () => {
+        const legacyPayload: HeartbeatInput = {
+            connection_state: 'up',
+            timestamp: new Date().toISOString(),
+            ipv4: '82.67.197.112',
+            bandwidth_down: 10000000000,
+            rate_down: 4734,
+        };
+
+        assert.strictEqual(legacyPayload.connected_devices_total, undefined);
+        assert.strictEqual(legacyPayload.sfp_pwr_rx_dbm, undefined);
+        assert.strictEqual(legacyPayload.temp_cpu, undefined);
+        assert.strictEqual(legacyPayload.uptime, undefined);
+    });
 });

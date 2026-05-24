@@ -16,6 +16,14 @@ export interface HeartbeatsTable {
     rate_up: number | null;
     bytes_down: number | null;
     bytes_up: number | null;
+    connected_devices_total: number | null;
+    connected_devices_wifi: number | null;
+    sfp_pwr_rx_dbm: number | null;
+    sfp_pwr_tx_dbm: number | null;
+    temp_cpu: number | null;
+    temp_switch: number | null;
+    fan_rpm: number | null;
+    uptime: number | null;
     metadata: string | null;
 }
 
@@ -35,6 +43,14 @@ export interface HeartbeatsInsert {
     rate_up?: number | null;
     bytes_down?: number | null;
     bytes_up?: number | null;
+    connected_devices_total?: number | null;
+    connected_devices_wifi?: number | null;
+    sfp_pwr_rx_dbm?: number | null;
+    sfp_pwr_tx_dbm?: number | null;
+    temp_cpu?: number | null;
+    temp_switch?: number | null;
+    fan_rpm?: number | null;
+    uptime?: number | null;
     metadata?: string | null;
     received_at?: Date;
 }

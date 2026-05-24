@@ -16,22 +16,38 @@ export interface HeartbeatRecord {
     rate_up: number | null;
     bytes_down: number | null;
     bytes_up: number | null;
+    connected_devices_total: number | null;
+    connected_devices_wifi: number | null;
+    sfp_pwr_rx_dbm: number | null;
+    sfp_pwr_tx_dbm: number | null;
+    temp_cpu: number | null;
+    temp_switch: number | null;
+    fan_rpm: number | null;
+    uptime: number | null;
     metadata: Record<string, unknown> | null;
 }
 
 export interface HeartbeatInput {
     connection_state: string;
     timestamp: string | Date;
-    ipv4?: string;
-    ipv6?: string;
-    media_state?: string;
-    connection_type?: string;
-    bandwidth_down?: number;
-    bandwidth_up?: number;
-    rate_down?: number;
-    rate_up?: number;
-    bytes_down?: number;
-    bytes_up?: number;
+    ipv4?: string | null;
+    ipv6?: string | null;
+    media_state?: string | null;
+    connection_type?: string | null;
+    bandwidth_down?: number | null;
+    bandwidth_up?: number | null;
+    rate_down?: number | null;
+    rate_up?: number | null;
+    bytes_down?: number | null;
+    bytes_up?: number | null;
+    connected_devices_total?: number | null;
+    connected_devices_wifi?: number | null;
+    sfp_pwr_rx_dbm?: number | null;
+    sfp_pwr_tx_dbm?: number | null;
+    temp_cpu?: number | null;
+    temp_switch?: number | null;
+    fan_rpm?: number | null;
+    uptime?: number | null;
     [key: string]: unknown;
 }
 
@@ -58,6 +74,14 @@ export class HeartbeatService {
             rate_up,
             bytes_down,
             bytes_up,
+            connected_devices_total,
+            connected_devices_wifi,
+            sfp_pwr_rx_dbm,
+            sfp_pwr_tx_dbm,
+            temp_cpu,
+            temp_switch,
+            fan_rpm,
+            uptime,
             ...additionalFields
         } = heartbeatData;
 
@@ -79,6 +103,14 @@ export class HeartbeatService {
             rate_up: rate_up ?? null,
             bytes_down: bytes_down ?? null,
             bytes_up: bytes_up ?? null,
+            connected_devices_total: connected_devices_total ?? null,
+            connected_devices_wifi: connected_devices_wifi ?? null,
+            sfp_pwr_rx_dbm: sfp_pwr_rx_dbm ?? null,
+            sfp_pwr_tx_dbm: sfp_pwr_tx_dbm ?? null,
+            temp_cpu: temp_cpu ?? null,
+            temp_switch: temp_switch ?? null,
+            fan_rpm: fan_rpm ?? null,
+            uptime: uptime ?? null,
             metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
         };
 
