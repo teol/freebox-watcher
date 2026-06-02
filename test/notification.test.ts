@@ -72,6 +72,38 @@ describe('NotificationService', () => {
         assert.strictEqual(typeof service.sendDowntimeAlert, 'function');
         assert.strictEqual(typeof service.sendDowntimeConfirmedAlert, 'function');
         assert.strictEqual(typeof service.sendRecoveryAlert, 'function');
+        assert.strictEqual(typeof service.sendNewDevicesNotification, 'function');
+        assert.strictEqual(typeof service.isNewDeviceNotificationEnabled, 'function');
+    });
+
+    describe('isNewDeviceNotificationEnabled', () => {
+        it('should return false when Telegram is not configured', () => {
+            const service = new NotificationService(fastify.log);
+            assert.strictEqual(service.isNewDeviceNotificationEnabled(), false);
+        });
+
+        it('should return true when Telegram is configured and env var is not set', () => {
+            delete process.env.NEW_DEVICE_NOTIFICATION_ENABLED;
+            const service = new NotificationService(fastify.log);
+            (service as any).enabled = true;
+            assert.strictEqual(service.isNewDeviceNotificationEnabled(), true);
+        });
+
+        it('should return false when NEW_DEVICE_NOTIFICATION_ENABLED is "false"', () => {
+            process.env.NEW_DEVICE_NOTIFICATION_ENABLED = 'false';
+            const service = new NotificationService(fastify.log);
+            (service as any).enabled = true;
+            assert.strictEqual(service.isNewDeviceNotificationEnabled(), false);
+            delete process.env.NEW_DEVICE_NOTIFICATION_ENABLED;
+        });
+
+        it('should return true when NEW_DEVICE_NOTIFICATION_ENABLED is "true"', () => {
+            process.env.NEW_DEVICE_NOTIFICATION_ENABLED = 'true';
+            const service = new NotificationService(fastify.log);
+            (service as any).enabled = true;
+            assert.strictEqual(service.isNewDeviceNotificationEnabled(), true);
+            delete process.env.NEW_DEVICE_NOTIFICATION_ENABLED;
+        });
     });
 
     it('should not throw when sending alerts while disabled', async () => {
@@ -99,6 +131,12 @@ describe('NotificationService', () => {
 
         await assert.doesNotReject(async () => {
             await service.sendRecoveryAlert(1, new Date(), new Date());
+        });
+
+        await assert.doesNotReject(async () => {
+            await service.sendNewDevicesNotification([
+                { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            ]);
         });
     });
 
@@ -156,6 +194,108 @@ describe('NotificationService', () => {
         assert.match(sendCalls[0].message, /Downtime Confirmed/);
         assert.match(sendCalls[0].message, /over 30 minutes/);
         assert.deepStrictEqual(sendCalls[0].options, { parse_mode: 'Markdown' });
+    });
+
+    describe('sendNewDevicesNotification', () => {
+        it('should send a single notification for one new device', async () => {
+            const service = new NotificationService(fastify.log);
+            const sendCalls: Array<{ chatId: string; message: string; options: unknown }> = [];
+
+            (service as any).enabled = true;
+            (service as any).chatId = 'chat-789';
+            (service as any).bot = {
+                sendMessage: async (chatId: string, message: string, options: unknown) => {
+                    sendCalls.push({ chatId, message, options });
+                },
+            };
+
+            await service.sendNewDevicesNotification([
+                { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            ]);
+
+            assert.strictEqual(sendCalls.length, 1);
+            assert.strictEqual(sendCalls[0].chatId, 'chat-789');
+            assert.match(sendCalls[0].message, /New Device Detected/);
+            assert.match(sendCalls[0].message, /AA:BB:CC:11:22:33/);
+            assert.match(sendCalls[0].message, /MyPhone/);
+            assert.match(sendCalls[0].message, /smartphone/);
+            assert.deepStrictEqual(sendCalls[0].options, { parse_mode: 'Markdown' });
+        });
+
+        it('should send one aggregated notification for multiple new devices', async () => {
+            const service = new NotificationService(fastify.log);
+            const sendCalls: Array<{ chatId: string; message: string; options: unknown }> = [];
+
+            (service as any).enabled = true;
+            (service as any).chatId = 'chat-789';
+            (service as any).bot = {
+                sendMessage: async (chatId: string, message: string, options: unknown) => {
+                    sendCalls.push({ chatId, message, options });
+                },
+            };
+
+            await service.sendNewDevicesNotification([
+                { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+                { mac: 'DD:EE:FF:44:55:66', name: 'MyLaptop', type: 'laptop' },
+                { mac: '11:22:33:44:55:66', name: 'MyTV', type: 'tv' },
+            ]);
+
+            // Only one message sent regardless of the number of devices
+            assert.strictEqual(sendCalls.length, 1);
+            assert.match(sendCalls[0].message, /3 New Devices Detected/);
+            assert.match(sendCalls[0].message, /MyPhone/);
+            assert.match(sendCalls[0].message, /MyLaptop/);
+            assert.match(sendCalls[0].message, /MyTV/);
+        });
+
+        it('should send nothing for an empty device list', async () => {
+            const service = new NotificationService(fastify.log);
+            const sendCalls: Array<unknown>[] = [];
+
+            (service as any).enabled = true;
+            (service as any).chatId = 'chat-789';
+            (service as any).bot = {
+                sendMessage: async (...args: unknown[]) => {
+                    sendCalls.push(args);
+                },
+            };
+
+            await service.sendNewDevicesNotification([]);
+
+            assert.strictEqual(sendCalls.length, 0);
+        });
+
+        it('should not throw when sending new device notification while disabled', async () => {
+            const service = new NotificationService(fastify.log);
+
+            await assert.doesNotReject(async () => {
+                await service.sendNewDevicesNotification([
+                    { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+                ]);
+            });
+        });
+
+        it('should escape Markdown special characters in device name and type', async () => {
+            const service = new NotificationService(fastify.log);
+            const sendCalls: Array<{ message: string }> = [];
+
+            (service as any).enabled = true;
+            (service as any).chatId = 'chat-789';
+            (service as any).bot = {
+                sendMessage: async (_chatId: string, message: string) => {
+                    sendCalls.push({ message });
+                },
+            };
+
+            await service.sendNewDevicesNotification([
+                { mac: 'AA:BB:CC:11:22:33', name: 'my_device*name', type: 'smart[tv]' },
+            ]);
+
+            assert.strictEqual(sendCalls.length, 1);
+            // Underscores, asterisks and opening brackets must be escaped; ] is not special in Markdown
+            assert.match(sendCalls[0].message, /my\\_device\\\*name/);
+            assert.match(sendCalls[0].message, /smart\\\[tv\]/);
+        });
     });
 
     describe('formatDuration', () => {

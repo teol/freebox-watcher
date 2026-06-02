@@ -1,33 +1,50 @@
 import { ChartConfiguration } from 'chart.js';
+import { logger } from '../utils/logger.js';
 import { BaseChartService, CHART_WATERMARK } from './baseChart.js';
 import { HeartbeatService, type HeartbeatRecord } from './heartbeat.js';
 
 /**
- * Service for generating and sending daily heartbeat rate charts to Discord
+ * Service for generating and sending connected devices charts to Discord.
+ * Must be explicitly enabled via the `enabled` constructor flag (DEVICES_CHART_ENABLED env var).
  */
-export class DailyChartService extends BaseChartService {
+export class DevicesChartService extends BaseChartService {
+    private readonly enabled: boolean;
+
     constructor(
         heartbeatService: HeartbeatService,
         discordWebhookUrl?: string,
-        cronSchedule?: string
+        cronSchedule?: string,
+        enabled = false
     ) {
         super(heartbeatService, discordWebhookUrl, cronSchedule);
+        this.enabled = enabled;
     }
 
     protected get serviceLabel(): string {
-        return 'network chart';
+        return 'devices chart';
     }
 
     protected buildDiscordPayload(): { content: string; color: number } {
         return {
-            content: `📊 **Freebox Network Rate ${this.getIntervalDescription('discord')}**`,
-            color: 0x5865f2,
+            content: `📱 **Freebox Connected Devices ${this.getIntervalDescription('discord')}**`,
+            color: 0x7289da,
         };
     }
 
     /**
-     * Creates a network rate chart image from heartbeat data.
-     * Renders download and upload rates as lines over the reporting interval.
+     * Starts the cron job. Skips start if the service is not explicitly enabled.
+     */
+    public override start(): void {
+        if (!this.enabled) {
+            logger.info('Devices chart service is disabled (DEVICES_CHART_ENABLED != true)');
+            return;
+        }
+        super.start();
+    }
+
+    /**
+     * Creates a connected devices chart image from heartbeat data.
+     * Uses a filled line chart: total devices (blurple) and WiFi devices (gold) as overlapping areas.
      */
     protected async createChartImage(
         heartbeats: HeartbeatRecord[],
@@ -40,32 +57,8 @@ export class DailyChartService extends BaseChartService {
             })
         );
 
-        const rateDownData = heartbeats.map((h) =>
-            h.rate_down != null ? h.rate_down / 1000 : null
-        ); // Convert to Kbps
-        const rateUpData = heartbeats.map((h) => (h.rate_up != null ? h.rate_up / 1000 : null)); // Convert to Kbps
-
-        // Determine appropriate unit and scale using reduce for better performance
-        const maxRate = [...rateDownData, ...rateUpData].reduce<number>(
-            (max, v) => (v !== null && v > max ? v : max),
-            0
-        );
-
-        let unit = 'Kbps';
-        let scale = 1;
-
-        if (maxRate >= 1000000) {
-            // Gbps
-            unit = 'Gbps';
-            scale = 1000000;
-        } else if (maxRate >= 1000) {
-            // Mbps
-            unit = 'Mbps';
-            scale = 1000;
-        }
-
-        const scaledRateDown = rateDownData.map((v) => (v !== null ? v / scale : null));
-        const scaledRateUp = rateUpData.map((v) => (v !== null ? v / scale : null));
+        const totalData = heartbeats.map((h) => h.connected_devices_total ?? null);
+        const wifiData = heartbeats.map((h) => h.connected_devices_wifi ?? null);
 
         const intervalLabel = this.intervalHours === 1 ? 'Hour' : `${this.intervalHours} Hours`;
         const dateLabel = endDate.toLocaleDateString('fr-FR');
@@ -76,22 +69,22 @@ export class DailyChartService extends BaseChartService {
                 labels,
                 datasets: [
                     {
-                        label: `Download (${unit})`,
-                        data: scaledRateDown,
-                        borderColor: '#4bc0c0',
-                        backgroundColor: 'rgba(75, 192, 192, 0)',
-                        tension: 0.1,
-                        fill: false,
+                        label: 'Total Devices',
+                        data: totalData,
+                        borderColor: '#7289da',
+                        backgroundColor: 'rgba(114, 137, 218, 0.35)',
+                        tension: 0.3,
+                        fill: true,
                         pointRadius: 0,
                         borderWidth: 2,
                     },
                     {
-                        label: `Upload (${unit})`,
-                        data: scaledRateUp,
-                        borderColor: '#ff6384',
-                        backgroundColor: 'rgba(255, 99, 132, 0)',
-                        tension: 0.1,
-                        fill: false,
+                        label: 'WiFi Devices',
+                        data: wifiData,
+                        borderColor: '#faa61a',
+                        backgroundColor: 'rgba(250, 166, 26, 0.35)',
+                        tension: 0.3,
+                        fill: true,
                         pointRadius: 0,
                         borderWidth: 2,
                     },
@@ -102,7 +95,7 @@ export class DailyChartService extends BaseChartService {
                 plugins: {
                     title: {
                         display: true,
-                        text: `Freebox Network Rate - Last ${intervalLabel} (${dateLabel})`,
+                        text: `Freebox Connected Devices - Last ${intervalLabel} (${dateLabel})`,
                         color: 'rgba(255, 255, 255, 0.9)',
                         font: { size: 22, weight: 'bold' },
                         padding: { top: 10, bottom: 20 },
@@ -123,8 +116,12 @@ export class DailyChartService extends BaseChartService {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        title: { display: true, text: `Rate (${unit})`, color: '#ffffff' },
-                        ticks: { color: '#ffffff' },
+                        title: { display: true, text: 'Devices', color: '#ffffff' },
+                        ticks: {
+                            color: '#ffffff',
+                            // Device counts are integers
+                            stepSize: 1,
+                        },
                         grid: { color: 'rgba(255, 255, 255, 0.1)' },
                     },
                     x: {
@@ -137,6 +134,6 @@ export class DailyChartService extends BaseChartService {
         };
 
         const imageBuffer = await this.canvasRenderer.renderToBuffer(configuration);
-        return this.writeTempFile(imageBuffer, 'heartbeat-chart');
+        return this.writeTempFile(imageBuffer, 'devices-chart');
     }
 }

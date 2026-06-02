@@ -73,7 +73,9 @@ export class HeartbeatService {
      * @param heartbeatData The heartbeat data
      * @returns The ID of the inserted heartbeat
      */
-    async recordHeartbeat(heartbeatData: HeartbeatInput): Promise<number> {
+    async recordHeartbeat(
+        heartbeatData: HeartbeatInput
+    ): Promise<{ id: number; newDevices: ActiveDevice[] }> {
         const {
             connection_state,
             timestamp,
@@ -136,12 +138,24 @@ export class HeartbeatService {
 
             // Upsert devices with a non-empty MAC into the devices registry
             const devicesWithMac = (activeDevicesList ?? []).filter((d) => d.mac !== '');
+            let newDevices: ActiveDevice[] = [];
+
             if (devicesWithMac.length > 0) {
                 // Deduplicate by MAC — the Freebox API should not produce duplicates,
                 // but guard against it to avoid batch insert errors
                 const uniqueDevices = Array.from(
                     new Map(devicesWithMac.map((d) => [d.mac, d])).values()
                 );
+
+                // Detect which MACs are not yet in the registry (new devices)
+                const existingRows = await trx<DevicesTable>('devices')
+                    .whereIn(
+                        'mac',
+                        uniqueDevices.map((d) => d.mac)
+                    )
+                    .select('mac');
+                const existingMacs = new Set(existingRows.map((r) => r.mac));
+                newDevices = uniqueDevices.filter((d) => !existingMacs.has(d.mac));
 
                 await trx<DevicesTable>('devices')
                     .insert(
@@ -159,7 +173,7 @@ export class HeartbeatService {
                     .merge(['name', 'type', 'last_seen_at']);
             }
 
-            return id as number;
+            return { id: id as number, newDevices };
         });
     }
 

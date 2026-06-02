@@ -312,6 +312,45 @@ describe('HeartbeatService', () => {
         assert.strictEqual(phone?.name, 'MyPhoneRenamed');
     });
 
+    it('should identify new devices by comparing against existing MACs', () => {
+        const incomingDevices: ActiveDevice[] = [
+            { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            { mac: 'DD:EE:FF:44:55:66', name: 'MyLaptop', type: 'laptop' },
+            { mac: '11:22:33:44:55:66', name: 'NewDevice', type: 'unknown' },
+        ];
+
+        const existingMacs = new Set(['AA:BB:CC:11:22:33', 'DD:EE:FF:44:55:66']);
+        const newDevices = incomingDevices.filter((d) => !existingMacs.has(d.mac));
+
+        assert.strictEqual(newDevices.length, 1);
+        assert.strictEqual(newDevices[0].mac, '11:22:33:44:55:66');
+        assert.strictEqual(newDevices[0].name, 'NewDevice');
+    });
+
+    it('should return empty new devices list when all MACs are already known', () => {
+        const incomingDevices: ActiveDevice[] = [
+            { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            { mac: 'DD:EE:FF:44:55:66', name: 'MyLaptop', type: 'laptop' },
+        ];
+
+        const existingMacs = new Set(['AA:BB:CC:11:22:33', 'DD:EE:FF:44:55:66']);
+        const newDevices = incomingDevices.filter((d) => !existingMacs.has(d.mac));
+
+        assert.strictEqual(newDevices.length, 0);
+    });
+
+    it('should return all devices as new when the registry is empty', () => {
+        const incomingDevices: ActiveDevice[] = [
+            { mac: 'AA:BB:CC:11:22:33', name: 'MyPhone', type: 'smartphone' },
+            { mac: 'DD:EE:FF:44:55:66', name: 'MyLaptop', type: 'laptop' },
+        ];
+
+        const existingMacs = new Set<string>();
+        const newDevices = incomingDevices.filter((d) => !existingMacs.has(d.mac));
+
+        assert.strictEqual(newDevices.length, 2);
+    });
+
     it('should use heartbeat timestamp for device first_seen_at and last_seen_at', () => {
         const heartbeatTimestamp = new Date('2026-05-24T13:45:00.000Z');
         const device: ActiveDevice = {

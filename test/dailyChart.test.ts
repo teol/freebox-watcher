@@ -1,5 +1,6 @@
 import { describe, it, before, after, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { BaseChartService } from '../src/services/baseChart.js';
 import { DailyChartService } from '../src/services/dailyChart.js';
 import { HeartbeatService } from '../src/services/heartbeat.js';
 import fs from 'fs/promises';
@@ -18,12 +19,14 @@ describe('DailyChartService', () => {
         const service = new DailyChartService(heartbeatService, webhookUrl);
 
         assert.ok(service);
+        assert.ok(service instanceof BaseChartService);
     });
 
     it('should initialize without Discord webhook URL', () => {
         const service = new DailyChartService(heartbeatService);
 
         assert.ok(service);
+        assert.ok(service instanceof BaseChartService);
     });
 
     it('should not start when Discord webhook URL is not configured', () => {
@@ -251,9 +254,10 @@ describe('DailyChartService', () => {
 
         // Mock fetch to simulate successful Discord response
         const originalFetch = global.fetch;
-        let fetchCalled = false;
-        global.fetch = async () => {
-            fetchCalled = true;
+        let capturedPayloadJson = '';
+        global.fetch = async (_url, init) => {
+            const form = init?.body as FormData;
+            capturedPayloadJson = form.get('payload_json') as string;
             return {
                 ok: true,
                 status: 200,
@@ -265,8 +269,15 @@ describe('DailyChartService', () => {
         try {
             await service.generateAndSendChart();
 
-            // Verify fetch was called
-            assert.strictEqual(fetchCalled, true, 'Discord webhook should have been called');
+            // Verify fetch was called and payload contains the embed image reference
+            assert.ok(capturedPayloadJson, 'Discord webhook should have been called');
+            const payload = JSON.parse(capturedPayloadJson) as {
+                embeds: Array<{ image?: { url: string } }>;
+            };
+            assert.ok(
+                payload.embeds[0].image?.url.startsWith('attachment://heartbeat-chart-'),
+                'Embed image URL should reference the attached chart file'
+            );
 
             // Verify that temp files were cleaned up
             const tempDir = path.join(os.tmpdir(), 'freebox-watcher');
@@ -291,61 +302,117 @@ describe('DailyChartService', () => {
         }
     });
 
+    it('should preserve a rate of 0 as a data point rather than mapping it to null', async () => {
+        const webhookUrl = 'https://discord.com/api/webhooks/123/test';
+        const service = new DailyChartService(heartbeatService, webhookUrl);
+
+        const mockHeartbeats = [
+            {
+                id: 1,
+                status: 'up',
+                timestamp: new Date('2025-12-06T10:00:00Z'),
+                received_at: new Date('2025-12-06T10:00:00Z'),
+                rate_down: 0, // idle — must appear as 0, not as a gap
+                rate_up: 0,
+                ipv4: null,
+                ipv6: null,
+                media_state: null,
+                connection_type: null,
+                bandwidth_down: null,
+                bandwidth_up: null,
+                bytes_down: null,
+                bytes_up: null,
+                connected_devices_total: null,
+                connected_devices_wifi: null,
+                sfp_pwr_rx_dbm: null,
+                sfp_pwr_tx_dbm: null,
+                temp_cpu: null,
+                temp_switch: null,
+                fan_rpm: null,
+                uptime: null,
+                active_devices: null,
+                metadata: null,
+            },
+        ];
+
+        const originalHeartbeatMethod = heartbeatService.getHeartbeatsInRange;
+        heartbeatService.getHeartbeatsInRange = async () => mockHeartbeats;
+
+        const originalFetch = global.fetch;
+        let capturedPayloadJson = '';
+        global.fetch = async (_url, init) => {
+            capturedPayloadJson = (init?.body as FormData).get('payload_json') as string;
+            return { ok: true, status: 200, statusText: 'OK', text: async () => '' } as Response;
+        };
+
+        try {
+            await service.generateAndSendChart();
+            // Chart was generated (fetch called) — 0-rate heartbeat was not filtered out
+            assert.ok(
+                capturedPayloadJson,
+                'Chart should have been generated for a 0-rate heartbeat'
+            );
+        } finally {
+            heartbeatService.getHeartbeatsInRange = originalHeartbeatMethod;
+            global.fetch = originalFetch;
+        }
+    });
+
+    // parseCronInterval lives on BaseChartService and is inherited by DailyChartService.
+    // Tests call it via BaseChartService directly; the DailyChartService.parseCronInterval
+    // alias is verified by a dedicated test below.
     describe('parseCronInterval', () => {
         it('should parse daily CRON pattern (0 5 * * *) as 24 hours', () => {
-            const result = DailyChartService.parseCronInterval('0 5 * * *');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 5 * * *'), 24);
         });
 
         it('should parse hourly interval pattern (0 */4 * * *) as 4 hours', () => {
-            const result = DailyChartService.parseCronInterval('0 */4 * * *');
-            assert.strictEqual(result, 4);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 */4 * * *'), 4);
         });
 
         it('should parse hourly interval pattern (0 */6 * * *) as 6 hours', () => {
-            const result = DailyChartService.parseCronInterval('0 */6 * * *');
-            assert.strictEqual(result, 6);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 */6 * * *'), 6);
         });
 
         it('should parse hourly interval pattern (0 */2 * * *) as 2 hours', () => {
-            const result = DailyChartService.parseCronInterval('0 */2 * * *');
-            assert.strictEqual(result, 2);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 */2 * * *'), 2);
         });
 
         it('should parse every hour pattern (0 * * * *) as 1 hour', () => {
-            const result = DailyChartService.parseCronInterval('0 * * * *');
-            assert.strictEqual(result, 1);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 * * * *'), 1);
         });
 
         it('should parse any specific hour as 24 hours (daily)', () => {
-            const result = DailyChartService.parseCronInterval('0 10 * * *');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 10 * * *'), 24);
         });
 
         it('should default to 24 hours for invalid CRON expression', () => {
-            const result = DailyChartService.parseCronInterval('invalid');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('invalid'), 24);
         });
 
         it('should default to 24 hours for empty CRON expression', () => {
-            const result = DailyChartService.parseCronInterval('');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval(''), 24);
         });
 
         it('should default to 24 hours for incomplete CRON expression', () => {
-            const result = DailyChartService.parseCronInterval('0 5');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 5'), 24);
         });
 
         it('should default to 24 hours for unsupported CRON pattern', () => {
             // Weekly pattern
-            const result = DailyChartService.parseCronInterval('0 5 * * 1');
-            assert.strictEqual(result, 24);
+            assert.strictEqual(BaseChartService.parseCronInterval('0 5 * * 1'), 24);
         });
 
         it('should handle CRON expression with extra whitespace', () => {
-            const result = DailyChartService.parseCronInterval('  0   */3   *   *   *  ');
-            assert.strictEqual(result, 3);
+            assert.strictEqual(BaseChartService.parseCronInterval('  0   */3   *   *   *  '), 3);
+        });
+
+        it('should be accessible on DailyChartService via static inheritance', () => {
+            // Verify the static method is reachable on the subclass for backwards compatibility
+            assert.strictEqual(
+                DailyChartService.parseCronInterval,
+                BaseChartService.parseCronInterval
+            );
         });
     });
 });

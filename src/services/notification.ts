@@ -1,5 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import type { FastifyBaseLogger } from 'fastify';
+import type { ActiveDevice } from './heartbeat.js';
 
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
@@ -53,6 +54,14 @@ export class NotificationService {
      */
     isEnabled(): boolean {
         return this.enabled;
+    }
+
+    /**
+     * Check if new device notifications are enabled.
+     * Requires Telegram to be configured and NEW_DEVICE_NOTIFICATION_ENABLED != 'false'.
+     */
+    isNewDeviceNotificationEnabled(): boolean {
+        return this.enabled && process.env.NEW_DEVICE_NOTIFICATION_ENABLED !== 'false';
     }
 
     /**
@@ -156,6 +165,26 @@ export class NotificationService {
         }
 
         return parts.join(' ');
+    }
+
+    /**
+     * Send a single notification listing all newly detected devices.
+     * Sending one aggregated message avoids notification storms and Telegram rate limiting.
+     */
+    async sendNewDevicesNotification(devices: ActiveDevice[]): Promise<void> {
+        if (devices.length === 0) {
+            return;
+        }
+
+        const title =
+            devices.length === 1
+                ? '🆕 *New Device Detected*'
+                : `🆕 *${devices.length} New Devices Detected*`;
+
+        const esc = (s: string | null | undefined): string => (s ?? '').replace(/[_*`[]/g, '\\$&');
+        const lines = devices.map((d) => `• ${esc(d.name)} — \`${d.mac}\` (${esc(d.type)})`);
+
+        await this.sendMessage([title, '', ...lines].join('\n'));
     }
 
     /**
