@@ -39,9 +39,9 @@ export abstract class BaseChartService {
         this.intervalHours = BaseChartService.parseCronInterval(this.cronSchedule);
 
         // Fail-fast: Check for required Web APIs at startup
-        if (!globalThis.FormData || !globalThis.Blob) {
+        if (!globalThis.FormData || !globalThis.Blob || !globalThis.crypto?.randomUUID) {
             throw new Error(
-                'FormData and/or Blob APIs are not available in this environment. This application requires Node.js >= 22.0.0.'
+                'FormData, Blob, and/or crypto.randomUUID APIs are not available in this environment. This application requires Node.js >= 22.0.0.'
             );
         }
         this.FormDataConstructor = globalThis.FormData;
@@ -240,6 +240,7 @@ export abstract class BaseChartService {
             embeds: [
                 {
                     color,
+                    image: { url: `attachment://${filename}` },
                     timestamp: new Date().toISOString(),
                     footer: { text: 'Freebox Watcher' },
                 },

@@ -274,6 +274,28 @@ describe('NotificationService', () => {
                 ]);
             });
         });
+
+        it('should escape Markdown special characters in device name and type', async () => {
+            const service = new NotificationService(fastify.log);
+            const sendCalls: Array<{ message: string }> = [];
+
+            (service as any).enabled = true;
+            (service as any).chatId = 'chat-789';
+            (service as any).bot = {
+                sendMessage: async (_chatId: string, message: string) => {
+                    sendCalls.push({ message });
+                },
+            };
+
+            await service.sendNewDevicesNotification([
+                { mac: 'AA:BB:CC:11:22:33', name: 'my_device*name', type: 'smart[tv]' },
+            ]);
+
+            assert.strictEqual(sendCalls.length, 1);
+            // Underscores, asterisks and opening brackets must be escaped; ] is not special in Markdown
+            assert.match(sendCalls[0].message, /my\\_device\\\*name/);
+            assert.match(sendCalls[0].message, /smart\\\[tv\]/);
+        });
     });
 
     describe('formatDuration', () => {

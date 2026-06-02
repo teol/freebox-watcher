@@ -254,9 +254,10 @@ describe('DailyChartService', () => {
 
         // Mock fetch to simulate successful Discord response
         const originalFetch = global.fetch;
-        let fetchCalled = false;
-        global.fetch = async () => {
-            fetchCalled = true;
+        let capturedPayloadJson = '';
+        global.fetch = async (_url, init) => {
+            const form = init?.body as FormData;
+            capturedPayloadJson = form.get('payload_json') as string;
             return {
                 ok: true,
                 status: 200,
@@ -268,8 +269,15 @@ describe('DailyChartService', () => {
         try {
             await service.generateAndSendChart();
 
-            // Verify fetch was called
-            assert.strictEqual(fetchCalled, true, 'Discord webhook should have been called');
+            // Verify fetch was called and payload contains the embed image reference
+            assert.ok(capturedPayloadJson, 'Discord webhook should have been called');
+            const payload = JSON.parse(capturedPayloadJson) as {
+                embeds: Array<{ image?: { url: string } }>;
+            };
+            assert.ok(
+                payload.embeds[0].image?.url.startsWith('attachment://heartbeat-chart-'),
+                'Embed image URL should reference the attached chart file'
+            );
 
             // Verify that temp files were cleaned up
             const tempDir = path.join(os.tmpdir(), 'freebox-watcher');

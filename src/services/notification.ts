@@ -181,7 +181,8 @@ export class NotificationService {
                 ? '🆕 *New Device Detected*'
                 : `🆕 *${devices.length} New Devices Detected*`;
 
-        const lines = devices.map((d) => `• ${d.name} — \`${d.mac}\` (${d.type})`);
+        const esc = (s: string): string => s.replace(/[_*`[]/g, '\\$&');
+        const lines = devices.map((d) => `• ${esc(d.name)} — \`${d.mac}\` (${esc(d.type)})`);
 
         await this.sendMessage([title, '', ...lines].join('\n'));
     }
