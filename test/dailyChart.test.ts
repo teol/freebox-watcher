@@ -302,6 +302,62 @@ describe('DailyChartService', () => {
         }
     });
 
+    it('should preserve a rate of 0 as a data point rather than mapping it to null', async () => {
+        const webhookUrl = 'https://discord.com/api/webhooks/123/test';
+        const service = new DailyChartService(heartbeatService, webhookUrl);
+
+        const mockHeartbeats = [
+            {
+                id: 1,
+                status: 'up',
+                timestamp: new Date('2025-12-06T10:00:00Z'),
+                received_at: new Date('2025-12-06T10:00:00Z'),
+                rate_down: 0, // idle — must appear as 0, not as a gap
+                rate_up: 0,
+                ipv4: null,
+                ipv6: null,
+                media_state: null,
+                connection_type: null,
+                bandwidth_down: null,
+                bandwidth_up: null,
+                bytes_down: null,
+                bytes_up: null,
+                connected_devices_total: null,
+                connected_devices_wifi: null,
+                sfp_pwr_rx_dbm: null,
+                sfp_pwr_tx_dbm: null,
+                temp_cpu: null,
+                temp_switch: null,
+                fan_rpm: null,
+                uptime: null,
+                active_devices: null,
+                metadata: null,
+            },
+        ];
+
+        const originalHeartbeatMethod = heartbeatService.getHeartbeatsInRange;
+        heartbeatService.getHeartbeatsInRange = async () => mockHeartbeats;
+
+        const originalFetch = global.fetch;
+        let capturedPayloadJson = '';
+        global.fetch = async (_url, init) => {
+            capturedPayloadJson = (init?.body as FormData).get('payload_json') as string;
+            return { ok: true, status: 200, statusText: 'OK', text: async () => '' } as Response;
+        };
+
+        try {
+            await service.generateAndSendChart();
+            // Chart was generated (fetch called) — 0-rate heartbeat was not filtered out
+            assert.ok(
+                capturedPayloadJson,
+                'Chart should have been generated for a 0-rate heartbeat'
+            );
+        } finally {
+            heartbeatService.getHeartbeatsInRange = originalHeartbeatMethod;
+            global.fetch = originalFetch;
+        }
+    });
+
     // parseCronInterval lives on BaseChartService and is inherited by DailyChartService.
     // Tests call it via BaseChartService directly; the DailyChartService.parseCronInterval
     // alias is verified by a dedicated test below.

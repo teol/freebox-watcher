@@ -40,8 +40,10 @@ export class DailyChartService extends BaseChartService {
             })
         );
 
-        const rateDownData = heartbeats.map((h) => (h.rate_down ? h.rate_down / 1000 : null)); // Convert to Kbps
-        const rateUpData = heartbeats.map((h) => (h.rate_up ? h.rate_up / 1000 : null)); // Convert to Kbps
+        const rateDownData = heartbeats.map((h) =>
+            h.rate_down != null ? h.rate_down / 1000 : null
+        ); // Convert to Kbps
+        const rateUpData = heartbeats.map((h) => (h.rate_up != null ? h.rate_up / 1000 : null)); // Convert to Kbps
 
         // Determine appropriate unit and scale using reduce for better performance
         const maxRate = [...rateDownData, ...rateUpData].reduce<number>(
