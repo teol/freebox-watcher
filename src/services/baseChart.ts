@@ -24,7 +24,7 @@ export abstract class BaseChartService {
     protected discordWebhookUrl: string | null;
     protected cronSchedule: string;
     protected intervalHours: number;
-    protected canvasRenderer: ChartJSNodeCanvas;
+    private _canvasRenderer: ChartJSNodeCanvas | null = null;
     private FormDataConstructor: typeof FormData;
     private BlobConstructor: typeof Blob;
 
@@ -46,12 +46,19 @@ export abstract class BaseChartService {
         }
         this.FormDataConstructor = globalThis.FormData;
         this.BlobConstructor = globalThis.Blob;
+    }
 
-        this.canvasRenderer = new ChartJSNodeCanvas({
-            width: CHART_WIDTH,
-            height: CHART_HEIGHT,
-            backgroundColour: '#2c2f33',
-        });
+    // Lazily initialized to avoid loading the canvas native module at startup,
+    // which can corrupt require.cache in ways that break Fastify's plugin loader.
+    protected get canvasRenderer(): ChartJSNodeCanvas {
+        if (!this._canvasRenderer) {
+            this._canvasRenderer = new ChartJSNodeCanvas({
+                width: CHART_WIDTH,
+                height: CHART_HEIGHT,
+                backgroundColour: '#2c2f33',
+            });
+        }
+        return this._canvasRenderer;
     }
 
     /**
