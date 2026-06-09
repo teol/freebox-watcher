@@ -10,19 +10,26 @@ import { DevicesChartService } from './services/devicesChart.js';
 import { getLoggerOptions } from './utils/logger.js';
 import { API_PREFIX } from './constants/api.js';
 
+interface AppOptions {
+    /** Maximum number of requests per minute. Defaults to 5. Override in tests to avoid 429s. */
+    rateLimitMax?: number;
+}
+
 /**
  * Creates and configures the Fastify application instance.
  * Registers plugins, middleware, services, and routes — but does NOT
  * connect to the database or start listening on a port.
  */
-export async function createApp(): Promise<FastifyInstance> {
+export async function createApp(options: AppOptions = {}): Promise<FastifyInstance> {
+    const { rateLimitMax = 5 } = options;
+
     const fastify: FastifyInstance = Fastify({
         logger: getLoggerOptions(),
         trustProxy: ['127.0.0.1', '::1'],
     });
 
     await fastify.register(rateLimit, {
-        max: 5,
+        max: rateLimitMax,
         timeWindow: '1 minute',
         errorResponseBuilder: () => ({
             error: 'Too Many Requests',

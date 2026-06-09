@@ -12,18 +12,26 @@ import { API_PREFIX } from '../src/constants/api.js';
  */
 describe('Application smoke tests', () => {
     let fastify: FastifyInstance;
+    let originalApiSecret: string | undefined;
+    let originalNodeEnv: string | undefined;
 
     before(async () => {
+        originalApiSecret = process.env.API_SECRET;
+        originalNodeEnv = process.env.NODE_ENV;
+
         process.env.API_SECRET = 'test-secret-32-chars-for-smoke-tests!!';
         // Use production mode to avoid pino-pretty worker threads, which create
         // undefined entries in require.cache that trip Fastify's getPluginName.
         process.env.NODE_ENV = 'production';
-        fastify = await createApp();
+
+        fastify = await createApp({ rateLimitMax: 1000 });
         await fastify.ready();
     });
 
     after(async () => {
         await fastify.close();
+        process.env.API_SECRET = originalApiSecret;
+        process.env.NODE_ENV = originalNodeEnv;
     });
 
     it('should initialize all plugins and routes without throwing', () => {
