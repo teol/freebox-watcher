@@ -1,4 +1,11 @@
 /**
+ * Note on BIGINT columns (bandwidth_*, rate_*, bytes_*, uptime, disk_*_bytes):
+ * mysql2 with default config (supportBigNumbers=false) always returns BIGINT as JS number
+ * via Number(), unlike pg which returns them as strings. All values here are well within
+ * Number.MAX_SAFE_INTEGER (~9×10^15), so number | null is correct for this driver.
+ */
+
+/**
  * Heartbeats table schema
  */
 export interface HeartbeatsTable {
