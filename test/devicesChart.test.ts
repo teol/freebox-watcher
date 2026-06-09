@@ -33,6 +33,12 @@ interface MockHeartbeat {
     uptime: null;
     active_devices: null;
     metadata: null;
+    disk_temp: null;
+    disk_used_bytes: null;
+    disk_free_bytes: null;
+    disk_total_bytes: null;
+    disk_read_errors: null;
+    disk_write_errors: null;
 }
 
 function makeMockHeartbeat(
@@ -66,6 +72,12 @@ function makeMockHeartbeat(
         uptime: null,
         active_devices: null,
         metadata: null,
+        disk_temp: null,
+        disk_used_bytes: null,
+        disk_free_bytes: null,
+        disk_total_bytes: null,
+        disk_read_errors: null,
+        disk_write_errors: null,
     };
 }
 

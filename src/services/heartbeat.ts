@@ -37,6 +37,12 @@ export interface HeartbeatRecord {
     uptime: number | null;
     active_devices: ActiveDevice[] | null;
     metadata: Record<string, unknown> | null;
+    disk_temp: number | null;
+    disk_used_bytes: number | null;
+    disk_free_bytes: number | null;
+    disk_total_bytes: number | null;
+    disk_read_errors: number | null;
+    disk_write_errors: number | null;
 }
 
 export interface HeartbeatInput {
@@ -61,6 +67,12 @@ export interface HeartbeatInput {
     fan_rpm?: number | null;
     uptime?: number | null;
     active_devices?: ActiveDevice[] | null;
+    disk_temp?: number | null;
+    disk_used_bytes?: number | null;
+    disk_free_bytes?: number | null;
+    disk_total_bytes?: number | null;
+    disk_read_errors?: number | null;
+    disk_write_errors?: number | null;
     [key: string]: unknown;
 }
 
@@ -98,6 +110,12 @@ export class HeartbeatService {
             fan_rpm,
             uptime,
             active_devices,
+            disk_temp,
+            disk_used_bytes,
+            disk_free_bytes,
+            disk_total_bytes,
+            disk_read_errors,
+            disk_write_errors,
             ...additionalFields
         } = heartbeatData;
 
@@ -131,6 +149,12 @@ export class HeartbeatService {
             uptime: uptime ?? null,
             active_devices: activeDevicesList ? JSON.stringify(activeDevicesList) : null,
             metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
+            disk_temp: disk_temp ?? null,
+            disk_used_bytes: disk_used_bytes ?? null,
+            disk_free_bytes: disk_free_bytes ?? null,
+            disk_total_bytes: disk_total_bytes ?? null,
+            disk_read_errors: disk_read_errors ?? null,
+            disk_write_errors: disk_write_errors ?? null,
         };
 
         return await db.transaction(async (trx) => {
