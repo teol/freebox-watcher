@@ -24,7 +24,7 @@ export abstract class BaseChartService {
     protected discordWebhookUrl: string | null;
     protected cronSchedule: string;
     protected intervalHours: number;
-    protected canvasRenderer: ChartJSNodeCanvas;
+    private _canvasRenderer: ChartJSNodeCanvas | null = null;
     private FormDataConstructor: typeof FormData;
     private BlobConstructor: typeof Blob;
 
@@ -46,12 +46,22 @@ export abstract class BaseChartService {
         }
         this.FormDataConstructor = globalThis.FormData;
         this.BlobConstructor = globalThis.Blob;
+    }
 
-        this.canvasRenderer = new ChartJSNodeCanvas({
-            width: CHART_WIDTH,
-            height: CHART_HEIGHT,
-            backgroundColour: '#2c2f33',
-        });
+    // Lazily instantiated to defer the side-effects of ChartJSNodeCanvas construction
+    // (loading the canvas native addon), which can corrupt require.cache in ways that
+    // break Fastify's plugin loader. Note: the static import of chartjs-node-canvas
+    // at the top of this file still loads the JS module eagerly; only the native addon
+    // is deferred by delaying instantiation.
+    protected get canvasRenderer(): ChartJSNodeCanvas {
+        if (!this._canvasRenderer) {
+            this._canvasRenderer = new ChartJSNodeCanvas({
+                width: CHART_WIDTH,
+                height: CHART_HEIGHT,
+                backgroundColour: '#2c2f33',
+            });
+        }
+        return this._canvasRenderer;
     }
 
     /**
