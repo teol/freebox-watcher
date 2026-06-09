@@ -48,8 +48,11 @@ export abstract class BaseChartService {
         this.BlobConstructor = globalThis.Blob;
     }
 
-    // Lazily initialized to avoid loading the canvas native module at startup,
-    // which can corrupt require.cache in ways that break Fastify's plugin loader.
+    // Lazily instantiated to defer the side-effects of ChartJSNodeCanvas construction
+    // (loading the canvas native addon), which can corrupt require.cache in ways that
+    // break Fastify's plugin loader. Note: the static import of chartjs-node-canvas
+    // at the top of this file still loads the JS module eagerly; only the native addon
+    // is deferred by delaying instantiation.
     protected get canvasRenderer(): ChartJSNodeCanvas {
         if (!this._canvasRenderer) {
             this._canvasRenderer = new ChartJSNodeCanvas({

@@ -29,7 +29,7 @@ describe('Application smoke tests', () => {
     });
 
     after(async () => {
-        await fastify.close();
+        if (fastify) await fastify.close();
         process.env.API_SECRET = originalApiSecret;
         process.env.NODE_ENV = originalNodeEnv;
     });

@@ -51,15 +51,8 @@ async function shutdown(signal: string): Promise<void> {
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
     try {
-        // Stop downtime monitoring
-        fastify.downtimeMonitor.stop();
-
-        // Stop daily chart service
-        fastify.dailyChartService.stop();
-
-        // Stop devices chart service
-        fastify.devicesChartService.stop();
-
+        // fastify.close() triggers the onClose hook defined in app.ts,
+        // which stops the downtime monitor and chart services.
         await fastify.close();
         await closeConnection();
         fastify.log.info('Server shut down successfully');

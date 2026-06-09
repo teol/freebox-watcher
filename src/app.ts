@@ -59,6 +59,12 @@ export async function createApp(options: AppOptions = {}): Promise<FastifyInstan
     fastify.decorate('dailyChartService', dailyChartService);
     fastify.decorate('devicesChartService', devicesChartService);
 
+    fastify.addHook('onClose', () => {
+        downtimeMonitor.stop();
+        dailyChartService.stop();
+        devicesChartService.stop();
+    });
+
     await fastify.register(heartbeatRoutes, { prefix: API_PREFIX });
 
     return fastify;
