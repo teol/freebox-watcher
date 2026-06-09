@@ -55,6 +55,12 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                     temp_switch: { type: ['integer', 'null'] },
                     fan_rpm: { type: ['integer', 'null'] },
                     uptime: { type: ['integer', 'null'] },
+                    disk_temp: { type: ['integer', 'null'] },
+                    disk_used_bytes: { type: ['number', 'null'] },
+                    disk_free_bytes: { type: ['number', 'null'] },
+                    disk_total_bytes: { type: ['number', 'null'] },
+                    disk_read_errors: { type: ['integer', 'null'] },
+                    disk_write_errors: { type: ['integer', 'null'] },
                 },
                 additionalProperties: true,
             },
@@ -64,6 +70,9 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
     fastify.post<{ Body: HeartbeatRequestBody }>('/heartbeat', schema, async (request, reply) => {
         try {
             const { timestamp, ...heartbeatData } = request.body;
+
+            // Log full received payload at debug level for troubleshooting
+            fastify.log.debug({ payload: request.body }, 'Heartbeat payload received');
 
             // Validate timestamp
             const timestampDate = new Date(timestamp);
@@ -119,7 +128,28 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
             }
 
             fastify.log.info(
-                { heartbeatId: id, connection_state: connectionState },
+                {
+                    heartbeatId: id,
+                    connection_state: connectionState,
+                    ipv4: heartbeatData.ipv4 ?? null,
+                    connected_devices_total: heartbeatData.connected_devices_total ?? null,
+                    connected_devices_wifi: heartbeatData.connected_devices_wifi ?? null,
+                    sfp_pwr_rx_dbm: heartbeatData.sfp_pwr_rx_dbm ?? null,
+                    sfp_pwr_tx_dbm: heartbeatData.sfp_pwr_tx_dbm ?? null,
+                    temp_cpu: heartbeatData.temp_cpu ?? null,
+                    temp_switch: heartbeatData.temp_switch ?? null,
+                    fan_rpm: heartbeatData.fan_rpm ?? null,
+                    uptime: heartbeatData.uptime ?? null,
+                    active_devices_count: Array.isArray(heartbeatData.active_devices)
+                        ? heartbeatData.active_devices.length
+                        : null,
+                    disk_temp: heartbeatData.disk_temp ?? null,
+                    disk_used_bytes: heartbeatData.disk_used_bytes ?? null,
+                    disk_free_bytes: heartbeatData.disk_free_bytes ?? null,
+                    disk_total_bytes: heartbeatData.disk_total_bytes ?? null,
+                    disk_read_errors: heartbeatData.disk_read_errors ?? null,
+                    disk_write_errors: heartbeatData.disk_write_errors ?? null,
+                },
                 'Heartbeat recorded'
             );
 

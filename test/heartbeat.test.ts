@@ -202,6 +202,12 @@ describe('HeartbeatService', () => {
             temp_switch: 45,
             fan_rpm: 1441,
             uptime: 7189324,
+            disk_temp: 38,
+            disk_used_bytes: 120000000000,
+            disk_free_bytes: 880000000000,
+            disk_total_bytes: 1000000000000,
+            disk_read_errors: 0,
+            disk_write_errors: 0,
         };
 
         assert.strictEqual(fullPayload.connected_devices_total, 4);
@@ -212,6 +218,12 @@ describe('HeartbeatService', () => {
         assert.strictEqual(fullPayload.temp_switch, 45);
         assert.strictEqual(fullPayload.fan_rpm, 1441);
         assert.strictEqual(fullPayload.uptime, 7189324);
+        assert.strictEqual(fullPayload.disk_temp, 38);
+        assert.strictEqual(fullPayload.disk_used_bytes, 120000000000);
+        assert.strictEqual(fullPayload.disk_free_bytes, 880000000000);
+        assert.strictEqual(fullPayload.disk_total_bytes, 1000000000000);
+        assert.strictEqual(fullPayload.disk_read_errors, 0);
+        assert.strictEqual(fullPayload.disk_write_errors, 0);
     });
 
     it('should accept null values for new optional fields (degraded mode)', () => {
@@ -226,11 +238,19 @@ describe('HeartbeatService', () => {
             temp_switch: null,
             fan_rpm: null,
             uptime: null,
+            disk_temp: null,
+            disk_used_bytes: null,
+            disk_free_bytes: null,
+            disk_total_bytes: null,
+            disk_read_errors: null,
+            disk_write_errors: null,
         };
 
         assert.strictEqual(degradedPayload.sfp_pwr_rx_dbm, null);
         assert.strictEqual(degradedPayload.temp_cpu, null);
         assert.strictEqual(degradedPayload.uptime, null);
+        assert.strictEqual(degradedPayload.disk_temp, null);
+        assert.strictEqual(degradedPayload.disk_read_errors, null);
     });
 
     it('should accept heartbeat without new fields (backwards compatibility)', () => {
@@ -247,6 +267,8 @@ describe('HeartbeatService', () => {
         assert.strictEqual(legacyPayload.temp_cpu, undefined);
         assert.strictEqual(legacyPayload.uptime, undefined);
         assert.strictEqual(legacyPayload.active_devices, undefined);
+        assert.strictEqual(legacyPayload.disk_temp, undefined);
+        assert.strictEqual(legacyPayload.disk_read_errors, undefined);
     });
 
     it('should accept active_devices array with valid device entries', () => {

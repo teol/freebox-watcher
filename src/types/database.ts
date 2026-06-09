@@ -26,6 +26,12 @@ export interface HeartbeatsTable {
     uptime: number | null;
     active_devices: string | null;
     metadata: string | null;
+    disk_temp: number | null;
+    disk_used_bytes: number | null;
+    disk_free_bytes: number | null;
+    disk_total_bytes: number | null;
+    disk_read_errors: number | null;
+    disk_write_errors: number | null;
 }
 
 /**
@@ -55,6 +61,12 @@ export interface HeartbeatsInsert {
     active_devices?: string | null;
     metadata?: string | null;
     received_at?: Date;
+    disk_temp?: number | null;
+    disk_used_bytes?: number | null;
+    disk_free_bytes?: number | null;
+    disk_total_bytes?: number | null;
+    disk_read_errors?: number | null;
+    disk_write_errors?: number | null;
 }
 
 /**
