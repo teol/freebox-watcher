@@ -101,6 +101,20 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
                     );
             }
 
+            // Check disk space and alert if needed (fire-and-forget)
+            const { disk_free_bytes, disk_total_bytes } = heartbeatData;
+            if (
+                disk_free_bytes != null &&
+                disk_total_bytes != null &&
+                fastify.diskAlertService.isEnabled()
+            ) {
+                void fastify.diskAlertService
+                    .checkAndAlert(disk_free_bytes, disk_total_bytes)
+                    .catch((err: unknown) =>
+                        fastify.log.error({ err }, 'Failed to check disk space alert')
+                    );
+            }
+
             // Check if we need to end any active downtime
             const activeDowntime = await downtimeService.getActiveDowntimeEvent();
             const connectionState = heartbeatData.connection_state;

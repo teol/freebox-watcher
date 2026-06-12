@@ -7,6 +7,7 @@ import { DowntimeMonitor } from './services/downtimeMonitor.js';
 import { HeartbeatService } from './services/heartbeat.js';
 import { DailyChartService } from './services/dailyChart.js';
 import { DevicesChartService } from './services/devicesChart.js';
+import { DiskAlertService } from './services/diskAlert.js';
 import { getLoggerOptions } from './utils/logger.js';
 import { API_PREFIX } from './constants/api.js';
 
@@ -41,6 +42,7 @@ export async function createApp(options: AppOptions = {}): Promise<FastifyInstan
 
     const notificationService = new NotificationService(fastify.log);
     const downtimeMonitor = new DowntimeMonitor(fastify.log, notificationService);
+    const diskAlertService = new DiskAlertService(fastify.log, notificationService);
     const heartbeatService = new HeartbeatService();
     const dailyChartService = new DailyChartService(
         heartbeatService,
@@ -56,6 +58,7 @@ export async function createApp(options: AppOptions = {}): Promise<FastifyInstan
 
     fastify.decorate('notificationService', notificationService);
     fastify.decorate('downtimeMonitor', downtimeMonitor);
+    fastify.decorate('diskAlertService', diskAlertService);
     fastify.decorate('dailyChartService', dailyChartService);
     fastify.decorate('devicesChartService', devicesChartService);
 

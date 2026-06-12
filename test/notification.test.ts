@@ -73,6 +73,7 @@ describe('NotificationService', () => {
         assert.strictEqual(typeof service.sendDowntimeConfirmedAlert, 'function');
         assert.strictEqual(typeof service.sendRecoveryAlert, 'function');
         assert.strictEqual(typeof service.sendNewDevicesNotification, 'function');
+        assert.strictEqual(typeof service.sendDiskSpaceAlert, 'function');
         assert.strictEqual(typeof service.isNewDeviceNotificationEnabled, 'function');
     });
 
@@ -103,6 +104,39 @@ describe('NotificationService', () => {
             (service as any).enabled = true;
             assert.strictEqual(service.isNewDeviceNotificationEnabled(), true);
             delete process.env.NEW_DEVICE_NOTIFICATION_ENABLED;
+        });
+    });
+
+    it('should not throw when sending disk space alert while disabled', async () => {
+        const service = new NotificationService(fastify.log);
+
+        await assert.doesNotReject(async () => {
+            await service.sendDiskSpaceAlert(50_000_000_000, 1_000_000_000_000, 5.0);
+        });
+    });
+
+    describe('sendDiskSpaceAlert', () => {
+        it('should send a disk space alert with formatted GB values and percentage', async () => {
+            const service = new NotificationService(fastify.log);
+            const sendCalls: Array<{ chatId: string; message: string; options: unknown }> = [];
+
+            (service as any).enabled = true;
+            (service as any).chatId = 'chat-disk';
+            (service as any).bot = {
+                sendMessage: async (chatId: string, message: string, options: unknown) => {
+                    sendCalls.push({ chatId, message, options });
+                },
+            };
+
+            await service.sendDiskSpaceAlert(50_000_000_000, 1_000_000_000_000, 5.0);
+
+            assert.strictEqual(sendCalls.length, 1);
+            assert.strictEqual(sendCalls[0].chatId, 'chat-disk');
+            assert.match(sendCalls[0].message, /Disk Space Low/);
+            assert.match(sendCalls[0].message, /46\.6 GB/);
+            assert.match(sendCalls[0].message, /931\.3 GB/);
+            assert.match(sendCalls[0].message, /5\.0%/);
+            assert.deepStrictEqual(sendCalls[0].options, { parse_mode: 'Markdown' });
         });
     });
 

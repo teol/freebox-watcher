@@ -5,6 +5,7 @@ import { heartbeatRoutes } from '../src/routes/heartbeat.js';
 import { type HeartbeatInput, type ActiveDevice } from '../src/services/heartbeat.js';
 import { NotificationService } from '../src/services/notification.js';
 import { DowntimeMonitor } from '../src/services/downtimeMonitor.js';
+import { DiskAlertService } from '../src/services/diskAlert.js';
 import { registerRawBodyCapture } from '../src/middleware/rawBodyCapture.js';
 import { computeHmac, getCurrentTimestamp, generateNonce } from './helpers.js';
 
@@ -30,8 +31,10 @@ describe('Heartbeat Routes', () => {
         // Initialize and decorate services (required by heartbeat routes)
         const notificationService = new NotificationService(fastify.log);
         const downtimeMonitor = new DowntimeMonitor(fastify.log, notificationService);
+        const diskAlertService = new DiskAlertService(fastify.log, notificationService);
         fastify.decorate('notificationService', notificationService);
         fastify.decorate('downtimeMonitor', downtimeMonitor);
+        fastify.decorate('diskAlertService', diskAlertService);
 
         await fastify.register(heartbeatRoutes);
         await fastify.ready();

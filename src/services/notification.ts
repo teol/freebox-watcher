@@ -188,6 +188,26 @@ export class NotificationService {
     }
 
     /**
+     * Send disk space low alert
+     */
+    async sendDiskSpaceAlert(
+        freeBytes: number,
+        totalBytes: number,
+        freePercent: number
+    ): Promise<void> {
+        const freeGb = (freeBytes / 1_073_741_824).toFixed(1);
+        const totalGb = (totalBytes / 1_073_741_824).toFixed(1);
+
+        const message = [
+            '💾 *Disk Space Low*',
+            '',
+            `Free: ${freeGb} GB / ${totalGb} GB (${freePercent.toFixed(1)}%)`,
+        ].join('\n');
+
+        await this.sendMessage(message);
+    }
+
+    /**
      * Send recovery alert when service comes back online
      */
     async sendRecoveryAlert(downtimeId: number, startedAt: Date, endedAt: Date): Promise<void> {
