@@ -107,14 +107,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fastify/rate-limit@npm:^10.3.0":
-  version: 10.3.0
-  resolution: "@fastify/rate-limit@npm:10.3.0"
+"@fastify/rate-limit@npm:^11.0.0":
+  version: 11.0.0
+  resolution: "@fastify/rate-limit@npm:11.0.0"
   dependencies:
     "@lukeed/ms": "npm:^2.0.2"
     fastify-plugin: "npm:^5.0.0"
     toad-cache: "npm:^3.7.0"
-  checksum: 10c0/dc29c4e088362cc144a9782d86d50bc8bbd440d10017c394660ff26bd7468feb90ba412e101b3e312bfdbb7a515798ffd73801ff32a36d0fedf40032ff081dcb
+  checksum: 10c0/c918a7e85416954686bae73946dea197c33f2536726deb6bb9b551cac862f3a56b58d72cede932755a32ef3dc9a0a3d61b42976c227e21e9241baaebb1051b27
   languageName: node
   linkType: hard
 
@@ -1281,7 +1281,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "freebox-watcher@workspace:."
   dependencies:
-    "@fastify/rate-limit": "npm:^10.3.0"
+    "@fastify/rate-limit": "npm:^11.0.0"
     "@types/node": "npm:^25.9.2"
     "@types/node-cron": "npm:^3.0.11"
     "@types/node-telegram-bot-api": "npm:^0.64.14"
