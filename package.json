@@ -41,7 +41,7 @@
         "dotenv": "^17.4.2",
         "fastify": "^5.8.5",
         "knex": "^3.2.10",
-        "mysql2": "^3.22.4",
+        "mysql2": "^3.22.5",
         "node-cron": "^4.2.1",
         "node-telegram-bot-api": "^0.67.0",
         "pino": "^10.3.1",
@@ -49,10 +49,10 @@
         "rotating-file-stream": "^3.2.9"
     },
     "devDependencies": {
-        "@types/node": "^25.9.2",
+        "@types/node": "^25.9.3",
         "@types/node-cron": "^3.0.11",
         "@types/node-telegram-bot-api": "^0.64.14",
-        "prettier": "^3.8.3",
+        "prettier": "^3.8.4",
         "ts-node": "^10.9.2",
         "typescript": "^6.0.3"
     }
