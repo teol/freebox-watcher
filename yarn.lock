@@ -710,12 +710,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cron-parser@npm:^5.5.0":
-  version: 5.5.0
-  resolution: "cron-parser@npm:5.5.0"
+"cron-parser@npm:^5.9.0":
+  version: 5.9.0
+  resolution: "cron-parser@npm:5.9.0"
   dependencies:
-    luxon: "npm:^3.7.1"
-  checksum: 10c0/ffbda13dcfca26cd79c07d7cb4aa317c3634119696f3690dedf4f3baceacade5b1459fc160f65563b3a367ec1b020a2fd065fa49c4b6d937536ba3d637191cd2
+    luxon: "npm:^3.7.2"
+  checksum: 10c0/313bfc1f3dbc80af941132a6f20c29f30366bedb28567ea1bc14437b90cf3f8f88c688587fef7c0162410ec88422867f83ef79ac069b8e2411ac0d2cf1c7324d
   languageName: node
   linkType: hard
 
@@ -843,13 +843,6 @@ __metadata:
   version: 1.0.0
   resolution: "delayed-stream@npm:1.0.0"
   checksum: 10c0/d758899da03392e6712f042bec80aa293bbe9e9ff1b2634baae6a360113e708b91326594c8a486d475c69d6259afb7efacdc3537bfcda1c6c648e390ce601b19
-  languageName: node
-  linkType: hard
-
-"denque@npm:^2.1.0":
-  version: 2.1.0
-  resolution: "denque@npm:2.1.0"
-  checksum: 10c0/f9ef81aa0af9c6c614a727cb3bd13c5d7db2af1abf9e6352045b86e85873e629690f6222f4edd49d10e4ccf8f078bbeec0794fafaf61b659c0589d0c511ec363
   languageName: node
   linkType: hard
 
@@ -1142,6 +1135,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"fast-json-stringify@npm:^7.0.0":
+  version: 7.0.1
+  resolution: "fast-json-stringify@npm:7.0.1"
+  dependencies:
+    "@fastify/merge-json-schemas": "npm:^0.2.0"
+    ajv: "npm:^8.12.0"
+    ajv-formats: "npm:^3.0.1"
+    fast-uri: "npm:^4.0.0"
+    json-schema-ref-resolver: "npm:^3.0.0"
+    rfdc: "npm:^1.2.0"
+  checksum: 10c0/02da1a456a13bd36aecf50255f04514719d77c295a9fbfac53f7d17f6d8e0bc574b2457a899384fc243637e73b047f8f375d9b2fb3c2c265c6e53dad464b40e0
+  languageName: node
+  linkType: hard
+
 "fast-querystring@npm:^1.0.0":
   version: 1.1.2
   resolution: "fast-querystring@npm:1.1.2"
@@ -1165,6 +1172,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"fast-uri@npm:^4.0.0":
+  version: 4.1.2
+  resolution: "fast-uri@npm:4.1.2"
+  checksum: 10c0/539fda19fbc7ada89ac8c5beca3c7ab57d643789485ca25f2b88f94edaea3fc90d553ecd55d85b95d5c819ab2bf57f6ff7880aa0a92d0883e25bd35f30860e6a
+  languageName: node
+  linkType: hard
+
 "fastify-plugin@npm:^5.0.0":
   version: 5.1.0
   resolution: "fastify-plugin@npm:5.1.0"
@@ -1172,9 +1186,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fastify@npm:^5.8.5":
-  version: 5.8.5
-  resolution: "fastify@npm:5.8.5"
+"fastify@npm:^5.12.0":
+  version: 5.12.0
+  resolution: "fastify@npm:5.12.0"
   dependencies:
     "@fastify/ajv-compiler": "npm:^4.0.5"
     "@fastify/error": "npm:^4.0.0"
@@ -1182,16 +1196,16 @@ __metadata:
     "@fastify/proxy-addr": "npm:^5.0.0"
     abstract-logging: "npm:^2.0.1"
     avvio: "npm:^9.0.0"
-    fast-json-stringify: "npm:^6.0.0"
-    find-my-way: "npm:^9.0.0"
+    fast-json-stringify: "npm:^7.0.0"
+    find-my-way: "npm:^9.6.0"
     light-my-request: "npm:^6.0.0"
     pino: "npm:^9.14.0 || ^10.1.0"
-    process-warning: "npm:^5.0.0"
+    process-warning: "npm:^5.1.0"
     rfdc: "npm:^1.3.1"
     secure-json-parse: "npm:^4.0.0"
     semver: "npm:^7.6.0"
     toad-cache: "npm:^3.7.0"
-  checksum: 10c0/c12fb6cec8e9083d148edc49c99f75e518e28c1664b121085fc1392dc67cd2e132d21dd79e1ef37e1c77c5991b4854ac8850b8d5997691060ea4c13fb7421a0e
+  checksum: 10c0/abc39c7a630b923fc2e1eb2cdbe279aa6bbb02033d35a62c3388285b66d9395727a2ff7c0cb6f9992d435aae3c34dea74d92bacfa33bb15261f5536aeaeefe51
   languageName: node
   linkType: hard
 
@@ -1223,14 +1237,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"find-my-way@npm:^9.0.0":
-  version: 9.3.0
-  resolution: "find-my-way@npm:9.3.0"
+"find-my-way@npm:^9.6.0":
+  version: 9.8.0
+  resolution: "find-my-way@npm:9.8.0"
   dependencies:
     fast-deep-equal: "npm:^3.1.3"
     fast-querystring: "npm:^1.0.0"
     safe-regex2: "npm:^5.0.0"
-  checksum: 10c0/f221bc0c70b2c2a6f9282fd3e0ac1911fcbb68ac718da043ddcefdec3b9d884a54d6ef1bf92e1b2ff83400e50f3c22141206a8ea3308bf0e9e37fd177843425d
+  checksum: 10c0/c20bd5a92a2315265b5e2daab3b099c0c75a54a2d37536ddd7f4ae10b4c549dbc36534d3d50938b784a7183e76c281b0e23c82879dc3ec479e1c5fc412119e71
   languageName: node
   linkType: hard
 
@@ -1287,17 +1301,17 @@ __metadata:
     "@types/node-telegram-bot-api": "npm:^0.64.14"
     chart.js: "npm:^4.5.1"
     chartjs-node-canvas: "npm:^5.0.0"
-    cron-parser: "npm:^5.5.0"
+    cron-parser: "npm:^5.9.0"
     dotenv: "npm:^17.4.2"
-    fastify: "npm:^5.8.5"
-    knex: "npm:^3.2.10"
-    mysql2: "npm:^3.22.4"
-    node-cron: "npm:^4.2.1"
+    fastify: "npm:^5.12.0"
+    knex: "npm:^3.3.0"
+    mysql2: "npm:^3.23.3"
+    node-cron: "npm:^4.6.0"
     node-telegram-bot-api: "npm:^0.67.0"
     pino: "npm:^10.3.1"
     pino-pretty: "npm:^13.1.3"
-    prettier: "npm:^3.8.3"
-    rotating-file-stream: "npm:^3.2.9"
+    prettier: "npm:^3.9.6"
+    rotating-file-stream: "npm:^3.2.10"
     ts-node: "npm:^10.9.2"
     typescript: "npm:^6.0.3"
   languageName: unknown
@@ -1574,12 +1588,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"iconv-lite@npm:^0.7.2":
-  version: 0.7.2
-  resolution: "iconv-lite@npm:0.7.2"
+"iconv-lite@npm:^0.7.3":
+  version: 0.7.3
+  resolution: "iconv-lite@npm:0.7.3"
   dependencies:
     safer-buffer: "npm:>= 2.1.2 < 3.0.0"
-  checksum: 10c0/3c228920f3bd307f56bf8363706a776f4a060eb042f131cd23855ceca962951b264d0997ab38a1ad340e1c5df8499ed26e1f4f0db6b2a2ad9befaff22f14b722
+  checksum: 10c0/be2fd2414f7e94be3a63063fa0ad5919c16bc7b6e00c77eea0765ced6db405739f38dd51016583058fba25cc1d0106ba30b83fbb7a7e32f824d4db76f23d8d33
   languageName: node
   linkType: hard
 
@@ -1951,9 +1965,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"knex@npm:^3.2.10":
-  version: 3.2.10
-  resolution: "knex@npm:3.2.10"
+"knex@npm:^3.3.0":
+  version: 3.3.0
+  resolution: "knex@npm:3.3.0"
   dependencies:
     colorette: "npm:2.0.19"
     commander: "npm:^10.0.0"
@@ -1967,12 +1981,14 @@ __metadata:
     pg-connection-string: "npm:2.6.2"
     rechoir: "npm:^0.8.0"
     resolve-from: "npm:^5.0.0"
-    tarn: "npm:^3.0.2"
+    tarn: "npm:^3.1.0"
     tildify: "npm:2.0.0"
   peerDependencies:
     pg-query-stream: ^4.14.0
   peerDependenciesMeta:
     better-sqlite3:
+      optional: true
+    mariadb:
       optional: true
     mysql:
       optional: true
@@ -1990,7 +2006,7 @@ __metadata:
       optional: true
   bin:
     knex: bin/cli.js
-  checksum: 10c0/b2dbb6a01f520a5775e6885ae09d9e35f998e1d0eea9aa283e5125d563ebade39b69d9e362368384415195f3db9cb3ac415b97875532e2ad3099d0f9685a6a37
+  checksum: 10c0/946fb4d0a55894075fbdd45d8bcd8d14a358f1a89f413e205ee7867b8b3c58eb897b49facd3062f2be2abedaeb6ae98b5a593e6247848830088ceb55af2b4e8a
   languageName: node
   linkType: hard
 
@@ -2040,7 +2056,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"luxon@npm:^3.7.1":
+"luxon@npm:^3.7.2":
   version: 3.7.2
   resolution: "luxon@npm:3.7.2"
   checksum: 10c0/ed8f0f637826c08c343a29dd478b00628be93bba6f068417b1d8896b61cb61c6deacbe1df1e057dbd9298334044afa150f9aaabbeb3181418ac8520acfdc2ae2
@@ -2225,21 +2241,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"mysql2@npm:^3.22.4":
-  version: 3.22.4
-  resolution: "mysql2@npm:3.22.4"
+"mysql2@npm:^3.23.3":
+  version: 3.23.3
+  resolution: "mysql2@npm:3.23.3"
   dependencies:
     aws-ssl-profiles: "npm:^1.1.2"
-    denque: "npm:^2.1.0"
     generate-function: "npm:^2.3.1"
-    iconv-lite: "npm:^0.7.2"
+    iconv-lite: "npm:^0.7.3"
     long: "npm:^5.3.2"
     lru.min: "npm:^1.1.4"
     named-placeholders: "npm:^1.1.6"
-    sql-escaper: "npm:^1.3.3"
+    sql-escaper: "npm:^1.5.1"
   peerDependencies:
     "@types/node": ">= 8"
-  checksum: 10c0/c07279c05453450442cf1267182f68670436ad5da70ac93a6bffdbc82565bf208be0fd8340ee3f6a6d2742c2470571c40cd757569fa1378604b63f7140f2a7b7
+  checksum: 10c0/a04bf92c4b4badc607f793eef2c12a9f7c7388cfc4a8d2fa4279bb1103af744a5f096cb7b604599df95162a5520bd572064e3628fa584f6a2e23881f320409fb
   languageName: node
   linkType: hard
 
@@ -2284,10 +2299,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"node-cron@npm:^4.2.1":
-  version: 4.2.1
-  resolution: "node-cron@npm:4.2.1"
-  checksum: 10c0/804df01df230e96fd2f8ffcde004f4d5af953bccdf3ccf993dc450526dd65f553a2f2ad4bc0faf55c90c38cbc99c9ddbb88ee16cba3fc6bc74e606da6efb249e
+"node-cron@npm:^4.6.0":
+  version: 4.6.0
+  resolution: "node-cron@npm:4.6.0"
+  checksum: 10c0/6523219aedd60441b43acb65670d98751a875185d88666d32ee62b044f15ffdd6a5d5422f0a060a324df918990f218fe9e400bf1db54d308a72642e396a1fbd2
   languageName: node
   linkType: hard
 
@@ -2528,12 +2543,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"prettier@npm:^3.8.3":
-  version: 3.8.3
-  resolution: "prettier@npm:3.8.3"
+"prettier@npm:^3.9.6":
+  version: 3.9.6
+  resolution: "prettier@npm:3.9.6"
   bin:
     prettier: bin/prettier.cjs
-  checksum: 10c0/754816fd7593eb80f6376d7476d463e832c38a12f32775a82683adb6e35b772b1f484d65f19401507b983a8c8a7cd5a4a9f12006bd56491e8f35503473f77473
+  checksum: 10c0/9f7ddae234035868f3daab3dc34e6de7e54622185afb017378029f0c09a9c023248ccf6f34def0b17a0538e18c47aa1b3188bab72965d1bf735919baa0747e99
   languageName: node
   linkType: hard
 
@@ -2562,6 +2577,13 @@ __metadata:
   version: 5.0.0
   resolution: "process-warning@npm:5.0.0"
   checksum: 10c0/941f48863d368ec161e0b5890ba0c6af94170078f3d6b5e915c19b36fb59edb0dc2f8e834d25e0d375a8bf368a49d490f080508842168832b93489d17843ec29
+  languageName: node
+  linkType: hard
+
+"process-warning@npm:^5.1.0":
+  version: 5.1.0
+  resolution: "process-warning@npm:5.1.0"
+  checksum: 10c0/2a48d48b575f4e7888fd4735a6604acd89914efa909f3db5dd20ae56e8a8cdd3c32a3c738bba539b46d1c5096630e15286bcb7c7fca18dfbf04cc7d00fe34a0f
   languageName: node
   linkType: hard
 
@@ -2813,10 +2835,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rotating-file-stream@npm:^3.2.9":
-  version: 3.2.9
-  resolution: "rotating-file-stream@npm:3.2.9"
-  checksum: 10c0/5728f5b16f322e757ccf2e6e00325d7eae505664c6f725c896f1253fb8d310c681d2e205ac56c4533618723c010f414b1cf9f1dda6e57d08a9d56f45f61ea6a6
+"rotating-file-stream@npm:^3.2.10":
+  version: 3.2.10
+  resolution: "rotating-file-stream@npm:3.2.10"
+  checksum: 10c0/45a9cf3090175b8289c10e283c9f6ef56386588f0eafde2156596a472c0794afa786fbd39fa266c717e6dec7eb798602922ca4b847f2e5bf4609960da5a3debf
   languageName: node
   linkType: hard
 
@@ -3061,10 +3083,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"sql-escaper@npm:^1.3.3":
-  version: 1.3.3
-  resolution: "sql-escaper@npm:1.3.3"
-  checksum: 10c0/aa6545685745f4d457a6993cd7b442ac39d54aae6780d15e5ed1ff929f298f6c10562b9e09ddcbedcdf5c3601161e5ee39d3e8d435b1d168775f121946d1bf44
+"sql-escaper@npm:^1.5.1":
+  version: 1.5.1
+  resolution: "sql-escaper@npm:1.5.1"
+  checksum: 10c0/49986addddfbf86fe041de827abc9a089a6f757d4bec86860576e625468b0fa93a9ee42c5f20ed7d77391c0bbe02c68fb65a73b134367456681fd1a589bed231
   languageName: node
   linkType: hard
 
@@ -3230,10 +3252,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tarn@npm:^3.0.2":
-  version: 3.0.2
-  resolution: "tarn@npm:3.0.2"
-  checksum: 10c0/ea2344e3d21936111176375bd6f34eba69a38ef1bc59434d523fd313166f8a28a47b0a847846c119f72dcf2c1e1231596d74ac3fcfc3cc73966b3d293a327269
+"tarn@npm:^3.1.0":
+  version: 3.1.2
+  resolution: "tarn@npm:3.1.2"
+  checksum: 10c0/fae37a0f2a9ee4b0ba5c309b213a1111e65bbc72cab5056be26beebcfa2980613aa0dd66f054fa0433e0cc6951875137e37c0ac52edb56812fbf05957130a795
   languageName: node
   linkType: hard
 
