@@ -31,7 +31,9 @@ export async function createApp(options: AppOptions = {}): Promise<FastifyInstan
     await fastify.register(rateLimit, {
         max: rateLimitMax,
         timeWindow: '1 minute',
-        errorResponseBuilder: () => ({
+        // statusCode is required, otherwise Fastify answers with a 500 instead of a 429
+        errorResponseBuilder: (_request, context) => ({
+            statusCode: context.statusCode,
             error: 'Too Many Requests',
             message: 'Rate limit exceeded',
         }),
