@@ -14,6 +14,7 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 - 📊 MariaDB storage for heartbeat history
 - 🔔 Automatic downtime detection (5 minutes without heartbeat)
 - 📲 Telegram notifications for downtime alerts and recovery
+- 🔎 Optional read-only GraphQL API to query heartbeats and downtimes (disabled by default)
 - 📝 Structured logging with Pino
 - ⚡ High-performance API built with Fastify
 
@@ -91,6 +92,7 @@ yarn start
 - `yarn db:status` - Check migration status
 - `yarn db:make <name>` - Create a new migration file
 - `yarn format` - Format the codebase with Prettier
+- `yarn graphql:token` - Generate a GraphQL API token and its hash
 
 ## Configuration
 
@@ -120,6 +122,11 @@ DOWNTIME_CONFIRMATION_DELAY=1800000
 # Telegram Notifications (optional)
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_CHAT_ID=your-telegram-chat-id
+
+# GraphQL API (optional, disabled by default)
+GRAPHQL_ENABLED=false
+GRAPHQL_API_TOKEN_HASH=
+GRAPHQL_RATE_LIMIT=60
 ```
 
 ### Environment Variables
@@ -138,6 +145,9 @@ TELEGRAM_CHAT_ID=your-telegram-chat-id
 - `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
+- `GRAPHQL_ENABLED`: Set to `true` to expose the read-only GraphQL API (default: disabled)
+- `GRAPHQL_API_TOKEN_HASH`: SHA-256 hash of the GraphQL Bearer token, required when the API is enabled (see [GraphQL API](#graphql-api))
+- `GRAPHQL_RATE_LIMIT`: Maximum GraphQL requests per minute per IP address (default: 60)
 
 ## Database Schema
 
@@ -596,6 +606,82 @@ All authentication failures return the same generic error to prevent information
 - Wait 1 minute before retrying
 - Reduce request frequency to max 5 per minute
 - Check for loops sending excessive requests
+
+## GraphQL API
+
+An optional, **read-only** GraphQL API exposes heartbeats and downtime events. It is **disabled by default**.
+
+### Enabling the API
+
+1. Generate a token and its hash:
+
+    ```bash
+    yarn graphql:token
+    ```
+
+2. Give the token (`fbw_...`) to your client and add the hash to the server's `.env`:
+
+    ```env
+    GRAPHQL_ENABLED=true
+    GRAPHQL_API_TOKEN_HASH=<hash printed by the command>
+    ```
+
+3. Restart the service. The endpoint is available at `POST /api/graphql`.
+
+The service refuses to start if `GRAPHQL_ENABLED=true` and `GRAPHQL_API_TOKEN_HASH` is missing or invalid.
+
+### Querying the API
+
+```bash
+curl -X POST https://your-domain.example/api/graphql \
+    -H "Authorization: Bearer $GRAPHQL_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"query":"{ lastHeartbeat { timestamp status rateDown rateUp tempCpu } activeDowntime { startedAt } }"}'
+```
+
+Available queries:
+
+```graphql
+type Query {
+    lastHeartbeat: Heartbeat
+    heartbeat(id: ID!): Heartbeat
+    # Oldest first
+    heartbeats(from: DateTime!, to: DateTime!, limit: Int = 100, offset: Int = 0): [Heartbeat!]!
+    activeDowntime: Downtime
+    # Downtimes overlapping the range, newest first
+    downtimes(from: DateTime!, to: DateTime!, limit: Int = 100, offset: Int = 0): [Downtime!]!
+}
+```
+
+- `DateTime` values are ISO 8601 strings (e.g. `2026-01-31T12:00:00.000Z`).
+- `limit` must be between 1 and 1000.
+- 64-bit counters (`bytesDown`, `bandwidthDown`, `diskTotalBytes`, etc.) are exposed as `Float`, since GraphQL `Int` is limited to 32 bits.
+
+`Heartbeat` fields: `id`, `status`, `timestamp`, `receivedAt`, `mediaState`, `connectionType`, `bandwidthDown`, `bandwidthUp`, `rateDown`, `rateUp`, `bytesDown`, `bytesUp`, `connectedDevicesTotal`, `connectedDevicesWifi`, `sfpPwrRxDbm`, `sfpPwrTxDbm`, `tempCpu`, `tempSwitch`, `fanRpm`, `uptime`, `diskTemp`, `diskUsedBytes`, `diskFreeBytes`, `diskTotalBytes`, `diskReadErrors`, `diskWriteErrors`.
+
+`Downtime` fields: `id`, `startedAt`, `endedAt`, `duration` (seconds), `isActive`.
+
+### Data Not Exposed
+
+The schema is an explicit allowlist. The following data is stored but **never** exposed through GraphQL:
+
+- Public IP addresses (`ipv4`, `ipv6`)
+- Active devices (MAC addresses, names, types)
+- Free-form heartbeat `metadata`
+- Downtime `notes`
+
+### GraphQL Security
+
+- **Bearer token**: 256-bit random token. Only its SHA-256 hash is stored on the server, so leaking the `.env` file does not leak a usable token. Tokens are compared in constant time and only read from the `Authorization` header (never from the URL). The token must differ from `API_SECRET`.
+- **Read-only**: no mutations, no subscriptions.
+- **POST only**, JSON body limited to 16 KiB, responses sent with `Cache-Control: no-store`.
+- **Dedicated rate limit** (`GRAPHQL_RATE_LIMIT`), applied before authentication so failed attempts are limited too.
+- **Query cost limits**: at most 1000 tokens per document, 10 root fields per operation and 1000 items per page.
+- **Introspection disabled** and no field suggestions in error messages.
+- **Internal errors are masked** (`Internal server error`) and logged server-side.
+- Always serve the API over HTTPS (see [Production Deployment](#production-deployment)).
+
+To revoke a token, generate a new one with `yarn graphql:token`, replace `GRAPHQL_API_TOKEN_HASH` and restart the service.
 
 ## Telegram Notifications Setup
 

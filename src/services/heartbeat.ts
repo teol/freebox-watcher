@@ -77,6 +77,19 @@ export interface HeartbeatInput {
 }
 
 /**
+ * Converts a raw heartbeats row into a HeartbeatRecord (parses JSON columns)
+ */
+function toHeartbeatRecord(heartbeat: HeartbeatsTable): HeartbeatRecord {
+    return {
+        ...heartbeat,
+        active_devices: heartbeat.active_devices
+            ? (JSON.parse(heartbeat.active_devices) as ActiveDevice[])
+            : null,
+        metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
+    };
+}
+
+/**
  * HeartbeatService handles storing and managing heartbeat data
  */
 export class HeartbeatService {
@@ -214,13 +227,18 @@ export class HeartbeatService {
             return null;
         }
 
-        return {
-            ...heartbeat,
-            active_devices: heartbeat.active_devices
-                ? (JSON.parse(heartbeat.active_devices) as ActiveDevice[])
-                : null,
-            metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
-        };
+        return toHeartbeatRecord(heartbeat);
+    }
+
+    /**
+     * Get a heartbeat by its ID
+     * @param id The heartbeat ID
+     * @returns The heartbeat or null if not found
+     */
+    async getHeartbeatById(id: number): Promise<HeartbeatRecord | null> {
+        const heartbeat = await db<HeartbeatsTable>('heartbeats').where('id', id).first();
+
+        return heartbeat ? toHeartbeatRecord(heartbeat) : null;
     }
 
     /**
@@ -252,13 +270,33 @@ export class HeartbeatService {
             .whereBetween('timestamp', [startDate, endDate])
             .orderBy('timestamp', 'asc');
 
-        return heartbeats.map((heartbeat) => ({
-            ...heartbeat,
-            active_devices: heartbeat.active_devices
-                ? (JSON.parse(heartbeat.active_devices) as ActiveDevice[])
-                : null,
-            metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
-        }));
+        return heartbeats.map(toHeartbeatRecord);
+    }
+
+    /**
+     * Get a page of heartbeats within a time range
+     * @param startDate Start date
+     * @param endDate End date
+     * @param limit Maximum number of heartbeats to return
+     * @param offset Number of heartbeats to skip
+     * @returns Array of heartbeats ordered by timestamp ascending
+     */
+    async getHeartbeatsPage(
+        startDate: Date,
+        endDate: Date,
+        limit: number,
+        offset: number
+    ): Promise<HeartbeatRecord[]> {
+        const heartbeats = await db<HeartbeatsTable>('heartbeats')
+            .whereBetween('timestamp', [startDate, endDate])
+            .orderBy([
+                { column: 'timestamp', order: 'asc' },
+                { column: 'id', order: 'asc' },
+            ])
+            .limit(limit)
+            .offset(offset);
+
+        return heartbeats.map(toHeartbeatRecord);
     }
 
     /**

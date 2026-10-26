@@ -2,13 +2,17 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import { registerRawBodyCapture } from './middleware/rawBodyCapture.js';
 import { heartbeatRoutes } from './routes/heartbeat.js';
+import { graphqlRoutes } from './routes/graphql.js';
 import { NotificationService } from './services/notification.js';
 import { DowntimeMonitor } from './services/downtimeMonitor.js';
 import { HeartbeatService } from './services/heartbeat.js';
+import { DowntimeService } from './services/downtime.js';
 import { DailyChartService } from './services/dailyChart.js';
 import { DevicesChartService } from './services/devicesChart.js';
 import { getLoggerOptions } from './utils/logger.js';
 import { API_PREFIX } from './constants/api.js';
+import { createGraphqlSchema } from './graphql/schema.js';
+import { isGraphqlEnabled, loadGraphqlConfig } from './graphql/config.js';
 
 interface AppOptions {
     /** Maximum number of requests per minute. Defaults to 5. Override in tests to avoid 429s. */
@@ -68,6 +72,21 @@ export async function createApp(options: AppOptions = {}): Promise<FastifyInstan
     });
 
     await fastify.register(heartbeatRoutes, { prefix: API_PREFIX });
+
+    // Read-only GraphQL API, disabled by default (opt-in via GRAPHQL_ENABLED=true)
+    if (isGraphqlEnabled()) {
+        const { tokenHash, rateLimitMax } = loadGraphqlConfig();
+        await fastify.register(graphqlRoutes, {
+            prefix: API_PREFIX,
+            schema: createGraphqlSchema({
+                heartbeatService,
+                downtimeService: new DowntimeService(),
+            }),
+            tokenHash,
+            rateLimitMax,
+        });
+        fastify.log.info('GraphQL API enabled');
+    }
 
     return fastify;
 }
