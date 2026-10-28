@@ -21,6 +21,11 @@ import { type DowntimeEvent, type DowntimeService } from '../services/downtime.j
 export const MAX_PAGE_SIZE = 1000;
 
 /**
+ * Maximum offset of a paginated field (MariaDB scans and discards every skipped row)
+ */
+export const MAX_OFFSET = 100_000;
+
+/**
  * Default number of items returned by a paginated field
  */
 const DEFAULT_PAGE_SIZE = 100;
@@ -131,9 +136,18 @@ function toDowntimeDto(event: DowntimeEvent): DowntimeDto {
     };
 }
 
+// Date, time and an explicit UTC offset: without it, Date would use the server timezone
+const ISO_DATE_TIME_PATTERN =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
 function parseDateTime(value: unknown): Date {
     if (typeof value !== 'string') {
         throw new GraphQLError('DateTime must be an ISO 8601 string');
+    }
+    if (!ISO_DATE_TIME_PATTERN.test(value)) {
+        throw new GraphQLError(
+            `Invalid DateTime: "${value}" (expected ISO 8601 with a "Z" or "±hh:mm" offset)`
+        );
     }
 
     const date = new Date(value);
@@ -146,7 +160,8 @@ function parseDateTime(value: unknown): Date {
 
 const DateTimeScalar = new GraphQLScalarType<Date, string>({
     name: 'DateTime',
-    description: 'ISO 8601 date-time string (e.g. 2026-01-31T12:00:00.000Z)',
+    description:
+        'ISO 8601 date-time string with an explicit offset (e.g. 2026-01-31T12:00:00.000Z)',
     coerceOutputValue(value: unknown): string {
         const date = value instanceof Date ? value : new Date(String(value));
         if (Number.isNaN(date.getTime())) {
@@ -174,8 +189,8 @@ function validatePageArgs(args: PageArgs): PageArgs {
     if (args.limit < 1 || args.limit > MAX_PAGE_SIZE) {
         throw new GraphQLError(`"limit" must be between 1 and ${MAX_PAGE_SIZE}`);
     }
-    if (args.offset < 0) {
-        throw new GraphQLError('"offset" must be greater than or equal to 0');
+    if (args.offset < 0 || args.offset > MAX_OFFSET) {
+        throw new GraphQLError(`"offset" must be between 0 and ${MAX_OFFSET}`);
     }
     return args;
 }

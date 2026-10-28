@@ -653,8 +653,8 @@ type Query {
 }
 ```
 
-- `DateTime` values are ISO 8601 strings (e.g. `2026-01-31T12:00:00.000Z`).
-- `limit` must be between 1 and 1000.
+- `DateTime` values are ISO 8601 strings with an explicit offset, `Z` or `±hh:mm` (e.g. `2026-01-31T12:00:00.000Z`).
+- `limit` must be between 1 and 1000 and `offset` between 0 and 100000.
 - 64-bit counters (`bytesDown`, `bandwidthDown`, `diskTotalBytes`, etc.) are exposed as `Float`, since GraphQL `Int` is limited to 32 bits.
 
 `Heartbeat` fields: `id`, `status`, `timestamp`, `receivedAt`, `mediaState`, `connectionType`, `bandwidthDown`, `bandwidthUp`, `rateDown`, `rateUp`, `bytesDown`, `bytesUp`, `connectedDevicesTotal`, `connectedDevicesWifi`, `sfpPwrRxDbm`, `sfpPwrTxDbm`, `tempCpu`, `tempSwitch`, `fanRpm`, `uptime`, `diskTemp`, `diskUsedBytes`, `diskFreeBytes`, `diskTotalBytes`, `diskReadErrors`, `diskWriteErrors`.
@@ -676,7 +676,7 @@ The schema is an explicit allowlist. The following data is stored but **never** 
 - **Read-only**: no mutations, no subscriptions.
 - **POST only**, JSON body limited to 16 KiB, responses sent with `Cache-Control: no-store`.
 - **Dedicated rate limit** (`GRAPHQL_RATE_LIMIT`), applied before authentication so failed attempts are limited too.
-- **Query cost limits**: at most 1000 tokens per document, 10 root fields per operation and 1000 items per page.
+- **Query cost limits**: at most 1000 tokens per document, 10 root fields per operation, 1000 items per page and an estimated 100000 returned fields per operation (aliases, fragments and list sizes included).
 - **Introspection disabled** and no field suggestions in error messages.
 - **Internal errors are masked** (`Internal server error`) and logged server-side.
 - Always serve the API over HTTPS (see [Production Deployment](#production-deployment)).

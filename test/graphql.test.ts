@@ -328,8 +328,25 @@ describe('GraphQL Routes', () => {
             });
             assert.strictEqual(
                 response.body.errors?.[0].message,
-                '"offset" must be greater than or equal to 0'
+                '"offset" must be between 0 and 100000'
             );
+        });
+
+        it('should reject an offset greater than the maximum', async () => {
+            const response = await query({
+                query: '{ downtimes(from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z", offset: 100001) { id } }',
+            });
+            assert.strictEqual(
+                response.body.errors?.[0].message,
+                '"offset" must be between 0 and 100000'
+            );
+        });
+
+        it('should accept the maximum offset', async () => {
+            const response = await query({
+                query: '{ downtimes(from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z", offset: 100000) { id } }',
+            });
+            assert.strictEqual(response.statusCode, 200);
         });
 
         it('should reject an inverted date range', async () => {
@@ -347,6 +364,35 @@ describe('GraphQL Routes', () => {
                 query: '{ heartbeats(from: "not-a-date", to: "2026-01-01T00:00:00Z") { id } }',
             });
             assert.strictEqual(response.statusCode, 400);
+        });
+
+        for (const value of ['01/02/2026', '2026', '2026-01-01', '2026-01-01T00:00:00']) {
+            it(`should reject the DateTime "${value}" lacking an explicit offset`, async () => {
+                const response = await query({
+                    query: `{ heartbeats(from: "${value}", to: "2026-01-02T00:00:00Z") { id } }`,
+                });
+                assert.strictEqual(response.statusCode, 400);
+                assert.match(response.body.errors?.[0].message ?? '', /Invalid DateTime/);
+            });
+        }
+
+        it('should reject a DateTime variable lacking an explicit offset', async () => {
+            const response = await query({
+                query: 'query ($from: DateTime!) { heartbeats(from: $from, to: "2026-01-02T00:00:00Z") { id } }',
+                variables: { from: '2026-01-01T00:00:00' },
+            });
+            assert.strictEqual(response.statusCode, 400);
+        });
+
+        it('should convert DateTime values with a numeric offset to UTC', async () => {
+            heartbeatPageCalls.length = 0;
+            await query({
+                query: '{ heartbeats(from: "2026-01-01T01:00:00+01:00", to: "2026-01-02T00:00:00.500Z") { id } }',
+            });
+            assert.strictEqual(
+                heartbeatPageCalls[0].from.toISOString(),
+                '2026-01-01T00:00:00.000Z'
+            );
         });
 
         it('should reject operations with too many root fields', async () => {
