@@ -12,7 +12,7 @@ import {
     GraphQLString,
     Kind,
 } from 'graphql';
-import { type HeartbeatRecord, type HeartbeatService } from '../services/heartbeat.js';
+import { type HeartbeatService, type HeartbeatSummary } from '../services/heartbeat.js';
 import { type DowntimeEvent, type DowntimeService } from '../services/downtime.js';
 
 /**
@@ -94,7 +94,7 @@ interface PageArgs {
     offset: number;
 }
 
-function toHeartbeatDto(heartbeat: HeartbeatRecord): HeartbeatDto {
+function toHeartbeatDto(heartbeat: HeartbeatSummary): HeartbeatDto {
     return {
         id: heartbeat.id,
         status: heartbeat.status,

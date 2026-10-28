@@ -45,6 +45,47 @@ export interface HeartbeatRecord {
     disk_write_errors: number | null;
 }
 
+/**
+ * Heartbeat without the sensitive or heavy columns (public IP addresses, active devices, metadata)
+ */
+export type HeartbeatSummary = Omit<
+    HeartbeatRecord,
+    'ipv4' | 'ipv6' | 'active_devices' | 'metadata'
+>;
+
+/**
+ * Columns selected for a HeartbeatSummary: the allowlist lives at the query level so that
+ * the excluded columns are neither read from the database nor parsed
+ */
+const HEARTBEAT_SUMMARY_COLUMNS: (keyof HeartbeatSummary)[] = [
+    'id',
+    'status',
+    'timestamp',
+    'received_at',
+    'media_state',
+    'connection_type',
+    'bandwidth_down',
+    'bandwidth_up',
+    'rate_down',
+    'rate_up',
+    'bytes_down',
+    'bytes_up',
+    'connected_devices_total',
+    'connected_devices_wifi',
+    'sfp_pwr_rx_dbm',
+    'sfp_pwr_tx_dbm',
+    'temp_cpu',
+    'temp_switch',
+    'fan_rpm',
+    'uptime',
+    'disk_temp',
+    'disk_used_bytes',
+    'disk_free_bytes',
+    'disk_total_bytes',
+    'disk_read_errors',
+    'disk_write_errors',
+];
+
 export interface HeartbeatInput {
     connection_state: string;
     timestamp: string | Date;
@@ -233,12 +274,15 @@ export class HeartbeatService {
     /**
      * Get a heartbeat by its ID
      * @param id The heartbeat ID
-     * @returns The heartbeat or null if not found
+     * @returns The heartbeat summary or null if not found
      */
-    async getHeartbeatById(id: number): Promise<HeartbeatRecord | null> {
-        const heartbeat = await db<HeartbeatsTable>('heartbeats').where('id', id).first();
+    async getHeartbeatById(id: number): Promise<HeartbeatSummary | null> {
+        const heartbeat = await db<HeartbeatsTable>('heartbeats')
+            .select(HEARTBEAT_SUMMARY_COLUMNS)
+            .where('id', id)
+            .first();
 
-        return heartbeat ? toHeartbeatRecord(heartbeat) : null;
+        return heartbeat ?? null;
     }
 
     /**
@@ -279,15 +323,16 @@ export class HeartbeatService {
      * @param endDate End date
      * @param limit Maximum number of heartbeats to return
      * @param offset Number of heartbeats to skip
-     * @returns Array of heartbeats ordered by timestamp ascending
+     * @returns Array of heartbeat summaries ordered by timestamp ascending
      */
     async getHeartbeatsPage(
         startDate: Date,
         endDate: Date,
         limit: number,
         offset: number
-    ): Promise<HeartbeatRecord[]> {
-        const heartbeats = await db<HeartbeatsTable>('heartbeats')
+    ): Promise<HeartbeatSummary[]> {
+        return await db<HeartbeatsTable>('heartbeats')
+            .select(HEARTBEAT_SUMMARY_COLUMNS)
             .whereBetween('timestamp', [startDate, endDate])
             .orderBy([
                 { column: 'timestamp', order: 'asc' },
@@ -295,8 +340,6 @@ export class HeartbeatService {
             ])
             .limit(limit)
             .offset(offset);
-
-        return heartbeats.map(toHeartbeatRecord);
     }
 
     /**
