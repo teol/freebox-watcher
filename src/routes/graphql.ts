@@ -11,7 +11,8 @@ import {
     type GraphQLSchema,
 } from 'graphql';
 import { createBearerAuth } from '../middleware/bearerAuth.js';
-import { createMaxRootFieldsRule } from '../graphql/validation.js';
+import { MAX_PAGE_SIZE } from '../graphql/schema.js';
+import { createMaxRootFieldsRule, estimateOperationCost } from '../graphql/validation.js';
 
 /**
  * Maximum request body size in bytes
@@ -32,6 +33,12 @@ const MAX_TOKENS = 1000;
  * Maximum number of root fields per operation (bounds the number of database queries)
  */
 const MAX_ROOT_FIELDS = 10;
+
+/**
+ * Maximum estimated number of fields returned by an operation (bounds execution and
+ * serialization cost: a full page of 1,000 heartbeats with every field is about 26,000)
+ */
+const MAX_OPERATION_COST = 100_000;
 
 /**
  * Maximum number of validation errors reported for a single document
@@ -139,6 +146,24 @@ export const graphqlRoutes: FastifyPluginAsync<GraphqlRouteOptions> = async (
             if (validationErrors.length > 0) {
                 return reply.code(400).send({
                     errors: validationErrors.map((error) => formatError(error, request.log)),
+                });
+            }
+
+            // Rejected before any resolver runs, so no database query is made
+            const cost = estimateOperationCost(
+                schema,
+                document,
+                operationName,
+                variables,
+                MAX_PAGE_SIZE
+            );
+            if (cost > MAX_OPERATION_COST) {
+                return reply.code(400).send({
+                    errors: [
+                        {
+                            message: `Operation cost is ${cost}, maximum allowed is ${MAX_OPERATION_COST}`,
+                        },
+                    ],
                 });
             }
 

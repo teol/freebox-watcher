@@ -370,6 +370,61 @@ describe('GraphQL Routes', () => {
             assert.match(response.body.errors?.[0].message ?? '', /12 root fields/);
         });
 
+        it('should reject nested aliases amplified by a reused fragment', async () => {
+            const callsBefore = heartbeatPageCalls.length;
+            const heartbeats = Array.from(
+                { length: 10 },
+                (_, i) =>
+                    `h${i}: heartbeats(from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z", limit: 1000) { ...F }`
+            );
+            const ids = Array.from({ length: 250 }, (_, i) => `a${i}: id`);
+            const response = await query({
+                query: `{ ${heartbeats.join(' ')} } fragment F on Heartbeat { ${ids.join(' ')} }`,
+            });
+
+            assert.strictEqual(response.statusCode, 400);
+            assert.match(response.body.errors?.[0].message ?? '', /^Operation cost is 2500010,/);
+            assert.strictEqual(heartbeatPageCalls.length, callsBefore);
+        });
+
+        it('should take the limit supplied through a variable into account', async () => {
+            const callsBefore = heartbeatPageCalls.length;
+            const ids = Array.from({ length: 150 }, (_, i) => `a${i}: id`);
+            const response = await query({
+                query: `query ($limit: Int!) { heartbeats(from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z", limit: $limit) { ${ids.join(' ')} } }`,
+                variables: { limit: 1000 },
+            });
+
+            assert.strictEqual(response.statusCode, 400);
+            assert.match(response.body.errors?.[0].message ?? '', /^Operation cost is 150001,/);
+            assert.strictEqual(heartbeatPageCalls.length, callsBefore);
+        });
+
+        it('should compute the cost of exponentially nested fragments in bounded time', async () => {
+            const depth = 40;
+            const fragments = Array.from({ length: depth }, (_, i) =>
+                i === depth - 1
+                    ? `fragment F${i} on Heartbeat { id }`
+                    : `fragment F${i} on Heartbeat { ...F${i + 1} ...F${i + 1} }`
+            );
+            const startedAt = Date.now();
+            const response = await query({
+                query: `{ heartbeats(from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z", limit: 1000) { ...F0 } } ${fragments.join(' ')}`,
+            });
+
+            assert.strictEqual(response.statusCode, 400);
+            assert.match(response.body.errors?.[0].message ?? '', /^Operation cost is /);
+            assert.ok(Date.now() - startedAt < 2000);
+        });
+
+        it('should accept a full page of heartbeats within the cost budget', async () => {
+            const response = await query({
+                query: '{ heartbeats(from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z", limit: 1000) { id status timestamp rateDown rateUp } }',
+            });
+
+            assert.strictEqual(response.statusCode, 200);
+        });
+
         it('should reject documents with too many tokens', async () => {
             const fields = Array.from({ length: 1000 }, () => 'id').join(' ');
             const response = await query({ query: `{ lastHeartbeat { ${fields} } }` });
