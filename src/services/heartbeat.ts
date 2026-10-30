@@ -237,15 +237,13 @@ export class HeartbeatService {
 
                 await trx<DevicesTable>('devices')
                     .insert(
-                        uniqueDevices.map(
-                            (device): DevicesInsert => ({
-                                mac: device.mac,
-                                name: device.name,
-                                type: device.type,
-                                first_seen_at: insertData.timestamp,
-                                last_seen_at: insertData.timestamp,
-                            })
-                        )
+                        uniqueDevices.map((device): DevicesInsert => ({
+                            mac: device.mac,
+                            name: device.name,
+                            type: device.type,
+                            first_seen_at: insertData.timestamp,
+                            last_seen_at: insertData.timestamp,
+                        }))
                     )
                     .onConflict('mac')
                     .merge(['name', 'type', 'last_seen_at']);

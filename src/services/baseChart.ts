@@ -1,5 +1,5 @@
 import os from 'os';
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import * as cronParser from 'cron-parser';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 import fs from 'fs/promises';
@@ -19,7 +19,7 @@ const CHART_HEIGHT = 500;
  * Subclasses implement the chart-specific rendering and Discord message content.
  */
 export abstract class BaseChartService {
-    protected cronJob: cron.ScheduledTask | null = null;
+    protected cronJob: ScheduledTask | null = null;
     protected heartbeatService: HeartbeatService;
     protected discordWebhookUrl: string | null;
     protected cronSchedule: string;
