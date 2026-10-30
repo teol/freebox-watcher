@@ -103,6 +103,34 @@ export class DowntimeService {
     }
 
     /**
+     * Get a page of downtime events overlapping a date range
+     * (including active events that started before the range end)
+     * @param startDate Start date
+     * @param endDate End date
+     * @param limit Maximum number of events to return
+     * @param offset Number of events to skip
+     * @returns Array of downtime events ordered by start date descending
+     */
+    async getDowntimeEventsPage(
+        startDate: Date,
+        endDate: Date,
+        limit: number,
+        offset: number
+    ): Promise<DowntimeEvent[]> {
+        return await db<DowntimeEventsTable>('downtime_events')
+            .where('started_at', '<=', endDate)
+            .andWhere((builder) => {
+                builder.where('ended_at', '>=', startDate).orWhereNull('ended_at');
+            })
+            .orderBy([
+                { column: 'started_at', order: 'desc' },
+                { column: 'id', order: 'desc' },
+            ])
+            .limit(limit)
+            .offset(offset);
+    }
+
+    /**
      * Calculate total downtime in a period
      * @param startDate Start date
      * @param endDate End date

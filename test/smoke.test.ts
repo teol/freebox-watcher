@@ -75,3 +75,37 @@ describe('Application smoke tests', () => {
         );
     });
 });
+
+describe('Rate limiting', () => {
+    let originalNodeEnv: string | undefined;
+
+    before(() => {
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+    });
+
+    after(() => {
+        process.env.NODE_ENV = originalNodeEnv;
+    });
+
+    it('should answer 429 (not 500) when the rate limit is exceeded', async () => {
+        const app = await createApp({ rateLimitMax: 1 });
+
+        try {
+            const send = async (): Promise<number> => {
+                const response = await app.inject({
+                    method: 'POST',
+                    url: `${API_PREFIX}/heartbeat`,
+                    headers: { 'content-type': 'application/json' },
+                    payload: '{}',
+                });
+                return response.statusCode;
+            };
+
+            await send();
+            assert.strictEqual(await send(), 429);
+        } finally {
+            await app.close();
+        }
+    });
+});
