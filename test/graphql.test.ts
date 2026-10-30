@@ -433,6 +433,23 @@ describe('GraphQL Routes', () => {
             assert.strictEqual(heartbeatPageCalls.length, callsBefore);
         });
 
+        it('should charge aliased __typename selections like any other field', async () => {
+            const callsBefore = heartbeatPageCalls.length;
+            const heartbeats = Array.from(
+                { length: 10 },
+                (_, i) =>
+                    `h${i}: heartbeats(from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z", limit: 1000) { ...F }`
+            );
+            const typenames = Array.from({ length: 250 }, (_, i) => `a${i}: __typename`);
+            const response = await query({
+                query: `{ ${heartbeats.join(' ')} } fragment F on Heartbeat { ${typenames.join(' ')} }`,
+            });
+
+            assert.strictEqual(response.statusCode, 400);
+            assert.match(response.body.errors?.[0].message ?? '', /^Operation cost is 2500010,/);
+            assert.strictEqual(heartbeatPageCalls.length, callsBefore);
+        });
+
         it('should take the limit supplied through a variable into account', async () => {
             const callsBefore = heartbeatPageCalls.length;
             const ids = Array.from({ length: 150 }, (_, i) => `a${i}: id`);

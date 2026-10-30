@@ -166,10 +166,7 @@ export function estimateOperationCost(
         for (const selection of selectionSet.selections) {
             switch (selection.kind) {
                 case Kind.FIELD: {
-                    if (selection.name.value.startsWith('__')) {
-                        break;
-                    }
-
+                    // Meta fields such as __typename are serialized for every item like any other
                     cost++;
 
                     const fieldDef =
