@@ -5,6 +5,7 @@ import { heartbeatRoutes } from './routes/heartbeat.js';
 import { graphqlRoutes } from './routes/graphql.js';
 import { NotificationService } from './services/notification.js';
 import { DowntimeMonitor } from './services/downtimeMonitor.js';
+import { ConnectionQualityMonitor } from './services/connectionQualityMonitor.js';
 import { HeartbeatService } from './services/heartbeat.js';
 import { DowntimeService } from './services/downtime.js';
 import { DailyChartService } from './services/dailyChart.js';
@@ -48,6 +49,11 @@ export async function createApp(options: AppOptions = {}): Promise<FastifyInstan
     const notificationService = new NotificationService(fastify.log);
     const downtimeMonitor = new DowntimeMonitor(fastify.log, notificationService);
     const heartbeatService = new HeartbeatService();
+    const connectionQualityMonitor = new ConnectionQualityMonitor(
+        fastify.log,
+        notificationService,
+        heartbeatService
+    );
     const dailyChartService = new DailyChartService(
         heartbeatService,
         process.env.DISCORD_WEBHOOK_URL,
@@ -62,11 +68,13 @@ export async function createApp(options: AppOptions = {}): Promise<FastifyInstan
 
     fastify.decorate('notificationService', notificationService);
     fastify.decorate('downtimeMonitor', downtimeMonitor);
+    fastify.decorate('connectionQualityMonitor', connectionQualityMonitor);
     fastify.decorate('dailyChartService', dailyChartService);
     fastify.decorate('devicesChartService', devicesChartService);
 
     fastify.addHook('onClose', () => {
         downtimeMonitor.stop();
+        connectionQualityMonitor.stop();
         dailyChartService.stop();
         devicesChartService.stop();
     });

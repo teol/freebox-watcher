@@ -1,10 +1,18 @@
 import TelegramBot from 'node-telegram-bot-api';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ActiveDevice } from './heartbeat.js';
+import type { QualityReport } from './connectionQualityMonitor.js';
 
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_DAY = 86400;
+
+/**
+ * Escape the characters interpreted by Telegram legacy Markdown
+ */
+function escapeMarkdown(value: string | null | undefined): string {
+    return (value ?? '').replace(/[_*`[]/g, '\\$&');
+}
 
 export interface DowntimeNotificationData {
     downtimeId: number;
@@ -181,8 +189,43 @@ export class NotificationService {
                 ? '🆕 *New Device Detected*'
                 : `🆕 *${devices.length} New Devices Detected*`;
 
-        const esc = (s: string | null | undefined): string => (s ?? '').replace(/[_*`[]/g, '\\$&');
-        const lines = devices.map((d) => `• ${esc(d.name)} — \`${d.mac}\` (${esc(d.type)})`);
+        const lines = devices.map(
+            (d) => `• ${escapeMarkdown(d.name)} — \`${d.mac}\` (${escapeMarkdown(d.type)})`
+        );
+
+        await this.sendMessage([title, '', ...lines].join('\n'));
+    }
+
+    /**
+     * Send a single notification summarizing the connection quality changes
+     */
+    async sendConnectionQualityAlert(report: QualityReport): Promise<void> {
+        const { degraded, recovered, reboots } = report;
+
+        if (degraded.length === 0 && recovered.length === 0 && reboots.length === 0) {
+            return;
+        }
+
+        let title = '🔄 *Freebox Rebooted*';
+        if (degraded.length > 0) {
+            title = '📉 *Connection Quality Degraded*';
+        } else if (recovered.length > 0) {
+            title = '📈 *Connection Quality Restored*';
+        }
+
+        const lines = [
+            ...degraded.map((result) =>
+                [
+                    `${result.severity === 'critical' ? '🔴' : '🟠'} *${result.label}*: ${escapeMarkdown(result.current)}`,
+                    `    ${escapeMarkdown(result.reason)}`,
+                ].join('\n')
+            ),
+            ...recovered.map(
+                (result) =>
+                    `✅ *${result.label}*: back to normal (${escapeMarkdown(result.current)})`
+            ),
+            ...reboots.map((bootAt) => `🔄 Freebox rebooted around ${bootAt.toISOString()}`),
+        ];
 
         await this.sendMessage([title, '', ...lines].join('\n'));
     }

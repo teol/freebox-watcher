@@ -5,6 +5,7 @@ import type {
     DevicesTable,
     DevicesInsert,
 } from '../types/database.js';
+import { QUALITY_SAMPLE_COLUMNS, type QualitySample } from './connectionQuality.js';
 
 export interface ActiveDevice {
     mac: string;
@@ -338,6 +339,22 @@ export class HeartbeatService {
             ])
             .limit(limit)
             .offset(offset);
+    }
+
+    /**
+     * Get the columns needed for the connection quality analysis within a time range
+     * @param startDate Start date
+     * @param endDate End date
+     * @returns Array of quality samples ordered by timestamp ascending
+     */
+    async getQualitySamples(startDate: Date, endDate: Date): Promise<QualitySample[]> {
+        return await db<HeartbeatsTable>('heartbeats')
+            .select(QUALITY_SAMPLE_COLUMNS)
+            .whereBetween('timestamp', [startDate, endDate])
+            .orderBy([
+                { column: 'timestamp', order: 'asc' },
+                { column: 'id', order: 'asc' },
+            ]);
     }
 
     /**

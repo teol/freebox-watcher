@@ -13,6 +13,7 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 - 🛡️ Rate limiting (5 requests per minute)
 - 📊 MariaDB storage for heartbeat history
 - 🔔 Automatic downtime detection (5 minutes without heartbeat)
+- 📉 Connection quality alerts (fiber signal, line rate, 4G backup, reboots)
 - 📲 Telegram notifications for downtime alerts and recovery
 - 🔎 Optional read-only GraphQL API to query heartbeats and downtimes (disabled by default)
 - 📝 Structured logging with Pino
@@ -123,6 +124,15 @@ DOWNTIME_CONFIRMATION_DELAY=1800000
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_CHAT_ID=your-telegram-chat-id
 
+# Connection quality monitoring (optional, enabled by default)
+QUALITY_MONITOR_ENABLED=true
+QUALITY_CHECK_INTERVAL=900000
+QUALITY_BASELINE_HOURS=24
+QUALITY_SFP_RX_WARNING_DBM=-25
+QUALITY_SFP_RX_CRITICAL_DBM=-27
+QUALITY_SFP_DROP_DB=2
+QUALITY_BANDWIDTH_DROP_PERCENT=20
+
 # GraphQL API (optional, disabled by default)
 GRAPHQL_ENABLED=false
 GRAPHQL_API_TOKEN_HASH=
@@ -145,6 +155,13 @@ GRAPHQL_RATE_LIMIT=60
 - `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
+- `QUALITY_MONITOR_ENABLED`: Set to `false` to disable the connection quality monitor (default: enabled)
+- `QUALITY_CHECK_INTERVAL`: Interval in milliseconds between two connection quality checks, also the length of the analysis window (default: 900000 = 15 minutes, minimum: 60000)
+- `QUALITY_BASELINE_HOURS`: Length in hours of the baseline period the analysis window is compared to (default: 24)
+- `QUALITY_SFP_RX_WARNING_DBM`: Fiber RX power below which a warning is sent (default: -25)
+- `QUALITY_SFP_RX_CRITICAL_DBM`: Fiber RX power below which a critical alert is sent (default: -27)
+- `QUALITY_SFP_DROP_DB`: Fiber RX/TX power drop in dB compared to the baseline that raises a warning (default: 2)
+- `QUALITY_BANDWIDTH_DROP_PERCENT`: Line rate drop in percent compared to the baseline that raises a warning (default: 20)
 - `GRAPHQL_ENABLED`: Set to `true` to expose the read-only GraphQL API (default: disabled)
 - `GRAPHQL_API_TOKEN_HASH`: SHA-256 hash of the GraphQL Bearer token, required when the API is enabled (see [GraphQL API](#graphql-api))
 - `GRAPHQL_RATE_LIMIT`: Maximum GraphQL requests per minute per IP address (default: 60)
@@ -708,11 +725,27 @@ Freebox Watcher can send downtime alerts via Telegram. This is optional but high
 
 ### Notification Types
 
-The service sends three types of notifications:
+The service sends the following notifications:
 
 - **🔴 Downtime Detected**: Sent immediately when no heartbeat is received for the configured timeout (default: 5 minutes)
 - **⚠️ Downtime Confirmed**: Sent after the downtime has lasted for the configured confirmation delay (default: 30 minutes)
 - **✅ Service Recovered**: Sent when a heartbeat is received after a downtime event
+- **🆕 New Device Detected**: Sent when an unknown device joins the LAN (see `NEW_DEVICE_NOTIFICATION_ENABLED`)
+- **📉 Connection Quality Degraded** / **📈 Connection Quality Restored** / **🔄 Freebox Rebooted**: Sent by the connection quality monitor (see below)
+
+### Connection Quality Monitoring
+
+Every `QUALITY_CHECK_INTERVAL` (default: 15 minutes), the service computes the **median** of the heartbeats received during the last interval (the analysis window) and compares it to the median of the preceding `QUALITY_BASELINE_HOURS` (default: 24 hours). Using medians makes the checks robust to isolated spikes.
+
+| Check            | Heartbeat field        | Warning 🟠                                      | Critical 🔴   |
+| ---------------- | ---------------------- | ----------------------------------------------- | ------------- |
+| Fiber RX power   | `sfp_pwr_rx_dbm`       | Below -25 dBm, or 2 dB below the baseline       | Below -27 dBm |
+| Fiber TX power   | `sfp_pwr_tx_dbm`       | 2 dB below the baseline                         | -             |
+| Line rate        | `bandwidth_down`/`_up` | 20% below the baseline                          | -             |
+| Connection media | `media_state`          | Different from the usual media (e.g. 4G backup) | -             |
+| Reboot           | `uptime`               | Uptime counter reset between two heartbeats     | -             |
+
+To avoid alert storms, only **changes** are notified, in a single aggregated message per check: a new degradation, a severity change, or a return to normal. A check is skipped while there is not enough data (at least 3 samples in the window and 12 in the baseline), for instance during a downtime, and its previous state is kept. The state is kept in memory: an ongoing degradation is notified again after a restart.
 
 ### Disabling Notifications
 
