@@ -1,4 +1,4 @@
-import TelegramBot from 'node-telegram-bot-api';
+import { Api } from 'node-telegram-bot-api';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ActiveDevice } from './heartbeat.js';
 import type { HealthReport } from './healthMonitor.js';
@@ -31,7 +31,7 @@ export interface DowntimeNotificationData {
  * NotificationService handles sending alerts via Telegram
  */
 export class NotificationService {
-    private bot: TelegramBot | null = null;
+    private bot: Api | null = null;
     private chatId: string | null = null;
     private enabled = false;
     private logger: FastifyBaseLogger;
@@ -56,7 +56,7 @@ export class NotificationService {
         }
 
         try {
-            this.bot = new TelegramBot(botToken, { polling: false });
+            this.bot = new Api(botToken);
             this.chatId = chatId;
             this.enabled = true;
             this.logger.info('Telegram notifications enabled');
@@ -90,7 +90,9 @@ export class NotificationService {
         }
 
         try {
-            await this.bot.sendMessage(this.chatId, message, {
+            await this.bot.sendMessage({
+                chat_id: this.chatId,
+                text: message,
                 parse_mode: 'Markdown',
             });
             this.logger.debug({ chatId: this.chatId }, 'Telegram message sent');
