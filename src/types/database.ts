@@ -31,8 +31,12 @@ export interface HeartbeatsTable {
     temp_switch: number | null;
     fan_rpm: number | null;
     uptime: number | null;
-    active_devices: string | null;
-    metadata: string | null;
+    /**
+     * JSON columns: depending on the server and driver versions, mysql2 returns them either as
+     * raw strings or already parsed (e.g. MariaDB with extended type metadata)
+     */
+    active_devices: string | unknown[] | null;
+    metadata: string | Record<string, unknown> | null;
     disk_temp: number | null;
     disk_used_bytes: number | null;
     disk_free_bytes: number | null;

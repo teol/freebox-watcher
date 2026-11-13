@@ -119,15 +119,24 @@ export interface HeartbeatInput {
 }
 
 /**
+ * Decode a JSON column, which the driver may return either as a raw string or already parsed
+ */
+function parseJsonColumn<T>(value: unknown): T | null {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    return (typeof value === 'string' ? JSON.parse(value) : value) as T;
+}
+
+/**
  * Converts a raw heartbeats row into a HeartbeatRecord (parses JSON columns)
  */
 function toHeartbeatRecord(heartbeat: HeartbeatsTable): HeartbeatRecord {
     return {
         ...heartbeat,
-        active_devices: heartbeat.active_devices
-            ? (JSON.parse(heartbeat.active_devices) as ActiveDevice[])
-            : null,
-        metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
+        active_devices: parseJsonColumn<ActiveDevice[]>(heartbeat.active_devices),
+        metadata: parseJsonColumn<Record<string, unknown>>(heartbeat.metadata),
     };
 }
 
