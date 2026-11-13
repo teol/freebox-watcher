@@ -147,7 +147,15 @@ describe('NotificationService', () => {
         (service as any).enabled = true;
         (service as any).chatId = 'chat-123';
         (service as any).bot = {
-            sendMessage: async (chatId: string, message: string, options: unknown) => {
+            sendMessage: async ({
+                chat_id: chatId,
+                text: message,
+                ...options
+            }: {
+                chat_id: string;
+                text: string;
+                parse_mode?: string;
+            }) => {
                 sendCalls.push({ chatId, message, options });
             },
         };
@@ -174,7 +182,15 @@ describe('NotificationService', () => {
         (service as any).enabled = true;
         (service as any).chatId = 'chat-456';
         (service as any).bot = {
-            sendMessage: async (chatId: string, message: string, options: unknown) => {
+            sendMessage: async ({
+                chat_id: chatId,
+                text: message,
+                ...options
+            }: {
+                chat_id: string;
+                text: string;
+                parse_mode?: string;
+            }) => {
                 sendCalls.push({ chatId, message, options });
             },
         };
@@ -204,7 +220,15 @@ describe('NotificationService', () => {
             (service as any).enabled = true;
             (service as any).chatId = 'chat-789';
             (service as any).bot = {
-                sendMessage: async (chatId: string, message: string, options: unknown) => {
+                sendMessage: async ({
+                    chat_id: chatId,
+                    text: message,
+                    ...options
+                }: {
+                    chat_id: string;
+                    text: string;
+                    parse_mode?: string;
+                }) => {
                     sendCalls.push({ chatId, message, options });
                 },
             };
@@ -229,7 +253,15 @@ describe('NotificationService', () => {
             (service as any).enabled = true;
             (service as any).chatId = 'chat-789';
             (service as any).bot = {
-                sendMessage: async (chatId: string, message: string, options: unknown) => {
+                sendMessage: async ({
+                    chat_id: chatId,
+                    text: message,
+                    ...options
+                }: {
+                    chat_id: string;
+                    text: string;
+                    parse_mode?: string;
+                }) => {
                     sendCalls.push({ chatId, message, options });
                 },
             };
@@ -282,7 +314,7 @@ describe('NotificationService', () => {
             (service as any).enabled = true;
             (service as any).chatId = 'chat-789';
             (service as any).bot = {
-                sendMessage: async (_chatId: string, message: string) => {
+                sendMessage: async ({ text: message }: { text: string }) => {
                     sendCalls.push({ message });
                 },
             };

@@ -660,7 +660,7 @@ describe('NotificationService.sendHealthAlert', () => {
         (service as any).enabled = true;
         (service as any).chatId = 'chat-123';
         (service as any).bot = {
-            sendMessage: async (_chatId: string, message: string) => {
+            sendMessage: async ({ text: message }: { text: string }) => {
                 messages.push(message);
             },
         };
