@@ -6,13 +6,23 @@ on:
     push:
         branches: ['main']
 
+permissions:
+    contents: read
+
+# Cancel outdated runs of the same pull request
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
     test:
+        name: Unit tests (Node ${{ matrix.node-version }})
         runs-on: ubuntu-latest
 
         strategy:
+            fail-fast: false
             matrix:
-                node-version: [22.x]
+                node-version: [22.x, 24.x]
 
         steps:
             - name: Checkout code
@@ -22,6 +32,7 @@ jobs:
               uses: actions/setup-node@v4
               with:
                   node-version: ${{ matrix.node-version }}
+                  cache: yarn
 
             - name: Install canvas dependencies
               run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev librsvg2-dev
@@ -36,7 +47,70 @@ jobs:
               run: yarn install --immutable
 
             - name: Check code formatting
+              if: matrix.node-version == '22.x'
               run: yarn format:check
 
-            - name: Run tests
-              run: yarn test
+            - name: Run unit tests with coverage
+              run: yarn test:coverage
+
+    integration:
+        name: Integration tests (MariaDB)
+        runs-on: ubuntu-latest
+
+        services:
+            mariadb:
+                image: mariadb:11.4
+                env:
+                    MARIADB_ROOT_PASSWORD: root
+                    MARIADB_DATABASE: freebox_watcher_test
+                    MARIADB_USER: freebox_watcher
+                    MARIADB_PASSWORD: test
+                ports:
+                    - 3306:3306
+                options: >-
+                    --health-cmd="healthcheck.sh --connect --innodb_initialized"
+                    --health-interval=5s
+                    --health-timeout=5s
+                    --health-retries=20
+
+        env:
+            DB_HOST: 127.0.0.1
+            DB_PORT: 3306
+            DB_USER: freebox_watcher
+            DB_PASSWORD: test
+            DB_NAME: freebox_watcher_test
+            # Run in a timezone different from the database one to catch date conversion issues
+            TZ: Europe/Paris
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22.x
+                  cache: yarn
+
+            - name: Install canvas dependencies
+              run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev librsvg2-dev
+
+            - name: Enable Corepack
+              run: corepack enable
+
+            - name: Activate Yarn version from packageManager
+              run: corepack prepare $(node -p "require('./package.json').packageManager") --activate
+
+            - name: Install dependencies
+              run: yarn install --immutable
+
+            - name: Apply migrations
+              run: yarn db:migrate
+
+            - name: Check that every migration can be rolled back and re-applied
+              run: |
+                  yarn db:rollback --all
+                  yarn db:migrate
+
+            - name: Run integration tests
+              run: yarn test:integration

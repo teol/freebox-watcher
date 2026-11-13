@@ -87,13 +87,37 @@ yarn start
 - `yarn dev` - Run the API directly with ts-node
 - `yarn watch` - Run the API in watch mode with automatic reloads
 - `yarn build` - Compile the TypeScript sources to `dist`
-- `yarn test` - Execute the test suite with Node's test runner
+- `yarn test` - Execute the unit test suite with Node's test runner (no database required)
+- `yarn test:coverage` - Execute the unit test suite with a coverage report
+- `yarn test:integration` - Execute the integration tests against a real MariaDB database (see [Integration Tests](#integration-tests))
 - `yarn db:migrate` - Apply pending database migrations
 - `yarn db:rollback` - Roll back the last batch of migrations
 - `yarn db:status` - Check migration status
 - `yarn db:make <name>` - Create a new migration file
 - `yarn format` - Format the codebase with Prettier
 - `yarn graphql:token` - Generate a GraphQL API token and its hash
+
+### Integration Tests
+
+The integration tests exercise the services, the HTTP API and the GraphQL API against a real MariaDB database. They wipe the tables, so they refuse to run unless `DB_NAME` ends with `_test`. The schema must be created beforehand with `yarn db:migrate`.
+
+For instance with Docker:
+
+```bash
+docker run -d --name freebox-watcher-test-db -p 3307:3306 \
+    -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=freebox_watcher_test \
+    -e MARIADB_USER=freebox_watcher -e MARIADB_PASSWORD=test mariadb:11.4
+```
+
+```bash
+export DB_HOST=127.0.0.1 DB_PORT=3307 DB_USER=freebox_watcher DB_PASSWORD=test DB_NAME=freebox_watcher_test
+```
+
+```bash
+yarn db:migrate && yarn test:integration
+```
+
+The CI runs the unit tests on Node.js 22 and 24, and the integration tests against a MariaDB service container, after checking that every migration can be rolled back and re-applied.
 
 ## Configuration
 
