@@ -427,12 +427,14 @@ describe('NotificationService', () => {
             process.env.TELEGRAM_CHAT_ID = '123456789';
         });
 
-        it('should bound every Telegram wait by default', () => {
-            assert.deepStrictEqual(TELEGRAM_TRANSPORT_OPTIONS, {
-                timeoutMs: 10_000,
-                maxRetries: 2,
-                maxRetryAfterMs: 5_000,
-            });
+        it('should give the bounded transport options to the Telegram client by default', () => {
+            const service = new NotificationService(fastify.log);
+
+            // Library internal: breaks loudly if the transport fields are renamed
+            const transport = (service as any).bot.transport;
+            assert.strictEqual(transport.timeoutMs, 10_000);
+            assert.strictEqual(transport.maxRetries, 2);
+            assert.strictEqual(transport.maxRetryAfterMs, 60_000);
         });
 
         it('should send the message through the configured transport', async () => {
@@ -496,8 +498,8 @@ describe('NotificationService', () => {
                     JSON.stringify({
                         ok: false,
                         error_code: 429,
-                        description: 'Too Many Requests: retry after 30',
-                        parameters: { retry_after: 30 },
+                        description: 'Too Many Requests: retry after 120',
+                        parameters: { retry_after: 120 },
                     }),
                     { status: 429 }
                 );
