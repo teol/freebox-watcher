@@ -332,7 +332,7 @@ export class HealthMonitor {
     private getRetainedReferences(now: Date): Partial<Record<HealthCheckId, HealthReference>> {
         const references: Partial<Record<HealthCheckId, HealthReference>> = {};
         for (const [check, { reference, until }] of this.retainedReferences) {
-            if (until > now) {
+            if (until >= now) {
                 references[check] = reference;
             }
         }
@@ -355,7 +355,7 @@ export class HealthMonitor {
         // Checks without enough data are not in results: their previous state is kept
         const nextIssues = new Map(this.activeIssues);
         const nextRetained = new Map(
-            [...this.retainedReferences].filter(([, { until }]) => until > now)
+            [...this.retainedReferences].filter(([, { until }]) => until >= now)
         );
 
         for (const result of results) {
@@ -366,10 +366,14 @@ export class HealthMonitor {
                     report.recovered.push(result);
                     nextIssues.delete(result.check);
                     if (previous.reference !== null) {
+                        // The degraded samples are at most as recent as now, and the baseline
+                        // ends one window before the check time: they leave it after both periods
                         nextRetained.set(result.check, {
                             reference: previous.reference,
                             until: new Date(
-                                now.getTime() + this.config.baselineHours * 3600 * 1000
+                                now.getTime() +
+                                    this.config.baselineHours * 3600 * 1000 +
+                                    this.config.checkIntervalMs
                             ),
                         });
                     }

@@ -1152,6 +1152,42 @@ describe('HealthMonitor review regressions', () => {
             assert.match(report?.degraded[0]?.reason ?? '', /is ftth$/);
         });
 
+        it('should keep the usual media until the degraded samples left the baseline', async () => {
+            const backup = { media_state: 'backup_4g' };
+            const day = 24 * 3600 * 1000;
+            // Backup from 13h45 before NOW, FTTH back for the last heartbeat before NOW only,
+            // then no heartbeat until the 15 minutes before NOW + 1 day
+            const source = {
+                samples: [
+                    ...timeline([
+                        [600, {}],
+                        [824, backup],
+                        [1, {}],
+                    ]),
+                    ...timeline([[45, {}]], new Date(NOW.getTime() + day + 30 * 60000)),
+                ],
+            };
+            const monitor = createMonitor(source);
+
+            const degradedAt = new Date(NOW.getTime() - 810 * 60000);
+            assert.deepStrictEqual(
+                (await monitor.check(degradedAt))?.degraded.map((r) => r.check),
+                ['media']
+            );
+            assert.deepStrictEqual(
+                (await monitor.check(NOW))?.recovered.map((r) => r.check),
+                ['media']
+            );
+
+            // The baseline still holds the backup samples of the window where FTTH came back
+            assert.strictEqual(await monitor.check(new Date(NOW.getTime() + day)), null);
+            // Right after they left the baseline, the reference comes from FTTH samples only
+            assert.strictEqual(
+                await monitor.check(new Date(NOW.getTime() + day + WINDOW_MS + 1000)),
+                null
+            );
+        });
+
         it('should release the retained reference once the baseline period has passed', async () => {
             const source = {
                 samples: timeline([
