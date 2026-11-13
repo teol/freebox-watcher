@@ -111,42 +111,6 @@ describe('Heartbeat Routes', () => {
 
         assert.strictEqual(response.statusCode, 400);
     });
-
-    it.skip('should accept heartbeat with new payload format (requires DB)', async () => {
-        const timestamp = getCurrentTimestamp();
-        const nonce = generateNonce();
-        const isoTimestamp = new Date().toISOString();
-        const bodyString = `{"connection_state":"up","timestamp":"${isoTimestamp}","ipv4":"192.168.1.1","ipv6":"2001:db8::1","media_state":"ftth","connection_type":"ethernet","bandwidth_down":1000000000,"bandwidth_up":500000000,"rate_down":9500,"rate_up":4800,"bytes_down":12345678,"bytes_up":8765432}`;
-        const signature = computeHmac(
-            'POST',
-            '/heartbeat',
-            timestamp,
-            nonce,
-            bodyString,
-            testApiSecret
-        );
-
-        const response = await fastify.inject({
-            method: 'POST',
-            url: '/heartbeat',
-            headers: {
-                authorization: `Bearer ${signature}`,
-                'signature-timestamp': timestamp,
-                'signature-nonce': nonce,
-                'content-type': 'application/json',
-            },
-            payload: bodyString,
-        });
-
-        if (response.statusCode !== 200) {
-            console.error('Error response:', response.body);
-        }
-
-        assert.strictEqual(response.statusCode, 200);
-        const body = JSON.parse(response.body) as HeartbeatResponseBody;
-        assert.strictEqual(body.success, true);
-        assert.ok(body.id);
-    });
 });
 
 describe('HeartbeatService', () => {

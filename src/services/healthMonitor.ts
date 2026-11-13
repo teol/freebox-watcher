@@ -1,0 +1,404 @@
+import type { FastifyBaseLogger } from 'fastify';
+import type { HeartbeatService } from './heartbeat.js';
+import type { NotificationService } from './notification.js';
+import {
+    analyzeHealth,
+    type ActiveIssue,
+    type HealthChecksConfig,
+    type HealthCheckId,
+    type HealthCheckResult,
+    type HealthEvent,
+    type HealthReference,
+    type HealthSeverity,
+    type TemperatureConfig,
+} from './healthChecks.js';
+
+export interface HealthMonitorConfig extends HealthChecksConfig {
+    /** Master switch of the monitor, each alert can also be disabled individually */
+    enabled: boolean;
+    /** Interval between two checks, also used as the analysis window length */
+    checkIntervalMs: number;
+}
+
+export interface HealthReport {
+    /** Checks that became degraded or whose severity worsened */
+    degraded: HealthCheckResult[];
+    /** Checks still degraded but whose severity improved */
+    improved: HealthCheckResult[];
+    /** Checks that went back to normal */
+    recovered: HealthCheckResult[];
+    /** Newly detected events */
+    events: HealthEvent[];
+}
+
+const SEVERITY_RANK: Record<HealthSeverity, number> = { warning: 1, critical: 2 };
+
+const ALERT_KEYS = [
+    'fiber',
+    'lineRate',
+    'media',
+    'reboot',
+    'publicIp',
+    'diskSpace',
+    'diskErrors',
+    'diskTemp',
+    'cpuTemp',
+    'switchTemp',
+    'fan',
+] as const;
+
+function parseNumber(name: string, defaultValue: number): number {
+    const raw = process.env[name];
+    if (raw === undefined || raw.trim() === '') {
+        return defaultValue;
+    }
+
+    const value = Number(raw);
+    if (!Number.isFinite(value)) {
+        throw new Error(`Invalid ${name}: '${raw}' is not a valid number`);
+    }
+
+    return value;
+}
+
+/**
+ * Every switch is enabled unless explicitly set to 'false'
+ */
+function parseEnabled(name: string): boolean {
+    return process.env[name] !== 'false';
+}
+
+function parseTemperature(
+    prefix: string,
+    defaultWarning: number,
+    defaultCritical: number
+): TemperatureConfig {
+    const config: TemperatureConfig = {
+        enabled: parseEnabled(`${prefix}_ENABLED`),
+        warning: parseNumber(`${prefix}_WARNING`, defaultWarning),
+        critical: parseNumber(`${prefix}_CRITICAL`, defaultCritical),
+    };
+
+    if (config.critical < config.warning) {
+        throw new Error(
+            `Invalid ${prefix}_CRITICAL: must be greater than or equal to ${prefix}_WARNING`
+        );
+    }
+
+    return config;
+}
+
+/**
+ * Load and validate the health monitor configuration from environment variables
+ */
+export function loadHealthMonitorConfig(): HealthMonitorConfig {
+    const config: HealthMonitorConfig = {
+        enabled: parseEnabled('HEALTH_MONITOR_ENABLED'),
+        checkIntervalMs: parseNumber('HEALTH_CHECK_INTERVAL', 900000),
+        baselineHours: parseNumber('HEALTH_BASELINE_HOURS', 24),
+        fiber: {
+            enabled: parseEnabled('HEALTH_FIBER_ENABLED'),
+            rxWarningDbm: parseNumber('HEALTH_FIBER_RX_WARNING_DBM', -25),
+            rxCriticalDbm: parseNumber('HEALTH_FIBER_RX_CRITICAL_DBM', -27),
+            dropDb: parseNumber('HEALTH_FIBER_DROP_DB', 2),
+        },
+        lineRate: {
+            enabled: parseEnabled('HEALTH_LINE_RATE_ENABLED'),
+            dropPercent: parseNumber('HEALTH_LINE_RATE_DROP_PERCENT', 20),
+        },
+        media: { enabled: parseEnabled('HEALTH_MEDIA_ENABLED') },
+        reboot: { enabled: parseEnabled('HEALTH_REBOOT_ENABLED') },
+        publicIp: { enabled: parseEnabled('HEALTH_PUBLIC_IP_ENABLED') },
+        diskSpace: {
+            enabled: parseEnabled('HEALTH_DISK_SPACE_ENABLED'),
+            warningPercent: parseNumber('HEALTH_DISK_SPACE_WARNING_PERCENT', 90),
+            criticalPercent: parseNumber('HEALTH_DISK_SPACE_CRITICAL_PERCENT', 95),
+        },
+        diskErrors: { enabled: parseEnabled('HEALTH_DISK_ERRORS_ENABLED') },
+        diskTemp: parseTemperature('HEALTH_DISK_TEMP', 55, 60),
+        cpuTemp: parseTemperature('HEALTH_CPU_TEMP', 90, 100),
+        switchTemp: parseTemperature('HEALTH_SWITCH_TEMP', 80, 90),
+        fan: { enabled: parseEnabled('HEALTH_FAN_ENABLED') },
+    };
+
+    if (config.checkIntervalMs < 60000) {
+        throw new Error('Invalid HEALTH_CHECK_INTERVAL: must be at least 60000 ms');
+    }
+    if (config.baselineHours <= 0) {
+        throw new Error('Invalid HEALTH_BASELINE_HOURS: must be greater than 0');
+    }
+    if (config.fiber.rxCriticalDbm > config.fiber.rxWarningDbm) {
+        throw new Error(
+            'Invalid HEALTH_FIBER_RX_CRITICAL_DBM: must be lower than or equal to HEALTH_FIBER_RX_WARNING_DBM'
+        );
+    }
+    if (config.fiber.dropDb <= 0) {
+        throw new Error('Invalid HEALTH_FIBER_DROP_DB: must be greater than 0');
+    }
+    if (config.lineRate.dropPercent <= 0 || config.lineRate.dropPercent > 100) {
+        throw new Error(
+            'Invalid HEALTH_LINE_RATE_DROP_PERCENT: must be between 0 (excluded) and 100'
+        );
+    }
+    const { warningPercent, criticalPercent } = config.diskSpace;
+    if (warningPercent <= 0 || criticalPercent > 100 || criticalPercent < warningPercent) {
+        throw new Error(
+            'Invalid HEALTH_DISK_SPACE_*_PERCENT: expected 0 < WARNING <= CRITICAL <= 100'
+        );
+    }
+
+    return config;
+}
+
+/**
+ * HealthMonitor periodically analyzes recent heartbeats and sends a Telegram notification when
+ * the Freebox health degrades (fiber signal, line rate, disk, temperatures...) or when a notable
+ * event happens (reboot, public IP change, disk errors).
+ * Only changes are notified (degraded, severity change, recovered, new event) to avoid alert
+ * storms. The state is only committed once the notification is delivered, so that a failed
+ * delivery is retried on the next run.
+ */
+export class HealthMonitor {
+    private timeoutId: NodeJS.Timeout | null = null;
+    // Degraded checks already notified; kept in memory, so an ongoing degradation is notified again after a restart
+    private activeIssues = new Map<HealthCheckId, HealthCheckResult>();
+    // Events are detected on heartbeats strictly newer than this cursor. It is set before the
+    // first query and only moves forward once a run succeeds, so failed runs are caught up.
+    private eventsCursor: Date | null = null;
+    // References of recently recovered checks, kept until the baseline no longer holds the degradation
+    private retainedReferences = new Map<
+        HealthCheckId,
+        { reference: HealthReference; until: Date }
+    >();
+    private readonly logger: FastifyBaseLogger;
+    private readonly notificationService: NotificationService;
+    private readonly heartbeatService: HeartbeatService;
+    private readonly config: HealthMonitorConfig;
+
+    constructor(
+        logger: FastifyBaseLogger,
+        notificationService: NotificationService,
+        heartbeatService: HeartbeatService,
+        config: HealthMonitorConfig = loadHealthMonitorConfig()
+    ) {
+        this.logger = logger.child({ service: 'HealthMonitor' });
+        this.notificationService = notificationService;
+        this.heartbeatService = heartbeatService;
+        this.config = config;
+    }
+
+    /**
+     * Names of the alerts enabled in the configuration
+     */
+    getEnabledAlerts(): string[] {
+        return ALERT_KEYS.filter((key) => this.config[key].enabled);
+    }
+
+    /**
+     * Start the periodic health checks
+     */
+    start(): void {
+        const enabledAlerts = this.getEnabledAlerts();
+
+        if (!this.config.enabled || enabledAlerts.length === 0) {
+            this.logger.info(
+                'Health monitor disabled by HEALTH_MONITOR_ENABLED or by disabling every alert'
+            );
+            return;
+        }
+
+        if (this.timeoutId) {
+            this.logger.warn('HealthMonitor is already running');
+            return;
+        }
+
+        this.logger.info(
+            {
+                checkIntervalMinutes: this.config.checkIntervalMs / 60000,
+                baselineHours: this.config.baselineHours,
+                enabledAlerts,
+            },
+            'Starting health monitor'
+        );
+
+        const runCheck = async (): Promise<void> => {
+            try {
+                await this.check();
+            } catch (error) {
+                this.logger.error({ error }, 'Error in health check');
+            }
+            // If the monitor has not been stopped, schedule the next check
+            if (this.timeoutId) {
+                this.timeoutId = setTimeout(runCheck, this.config.checkIntervalMs);
+            }
+        };
+        this.timeoutId = setTimeout(runCheck, this.config.checkIntervalMs);
+    }
+
+    /**
+     * Stop the periodic health checks
+     */
+    stop(): void {
+        if (this.timeoutId) {
+            clearTimeout(this.timeoutId);
+            this.timeoutId = null;
+            this.logger.info('Health monitor stopped');
+        }
+    }
+
+    /**
+     * Analyze the recent heartbeats and notify the health changes since the previous check
+     * @param now Reference time of the check
+     * @returns The changes found, or null when nothing changed
+     */
+    async check(now: Date = new Date()): Promise<HealthReport | null> {
+        const windowStart = new Date(now.getTime() - this.config.checkIntervalMs);
+        const baselineStart = new Date(
+            windowStart.getTime() - this.config.baselineHours * 3600 * 1000
+        );
+
+        if (this.eventsCursor === null) {
+            this.eventsCursor = new Date(windowStart.getTime() - 1);
+        }
+        // Events older than the fetched range cannot be analyzed
+        const eventsAfter = new Date(
+            Math.max(this.eventsCursor.getTime(), baselineStart.getTime())
+        );
+
+        const samples = await this.heartbeatService.getHealthSamples(baselineStart, now);
+        const retainedReferences = this.getRetainedReferences(now);
+        const analysis = analyzeHealth(samples, windowStart, this.config, {
+            activeIssues: this.getActiveIssues(),
+            retainedReferences,
+            eventsAfter,
+        });
+        const { report, nextIssues, nextRetained } = this.computeChanges(
+            analysis.results,
+            analysis.events,
+            now
+        );
+        const latestSampleAt = samples.length > 0 ? samples[samples.length - 1].timestamp : null;
+
+        if (report) {
+            this.logger.warn(
+                {
+                    degraded: report.degraded.map((r) => ({
+                        check: r.check,
+                        severity: r.severity,
+                    })),
+                    improved: report.improved.map((r) => ({
+                        check: r.check,
+                        severity: r.severity,
+                    })),
+                    recovered: report.recovered.map((r) => r.check),
+                    events: report.events.map((e) => e.kind),
+                },
+                'Health changed'
+            );
+
+            if (
+                this.notificationService.isEnabled() &&
+                !(await this.notificationService.sendHealthAlert(report))
+            ) {
+                this.logger.warn('Health alert not delivered, it will be retried on the next run');
+                return report;
+            }
+        } else {
+            this.logger.debug(
+                { evaluatedChecks: analysis.results.length, activeIssues: nextIssues.size },
+                'Health unchanged'
+            );
+        }
+
+        this.activeIssues = nextIssues;
+        this.retainedReferences = nextRetained;
+        if (latestSampleAt && latestSampleAt > this.eventsCursor) {
+            this.eventsCursor = latestSampleAt;
+        }
+
+        return report;
+    }
+
+    private getActiveIssues(): Partial<Record<HealthCheckId, ActiveIssue>> {
+        const issues: Partial<Record<HealthCheckId, ActiveIssue>> = {};
+        for (const [check, result] of this.activeIssues) {
+            if (result.severity !== null) {
+                issues[check] = { severity: result.severity, reference: result.reference };
+            }
+        }
+        return issues;
+    }
+
+    private getRetainedReferences(now: Date): Partial<Record<HealthCheckId, HealthReference>> {
+        const references: Partial<Record<HealthCheckId, HealthReference>> = {};
+        for (const [check, { reference, until }] of this.retainedReferences) {
+            if (until >= now) {
+                references[check] = reference;
+            }
+        }
+        return references;
+    }
+
+    /**
+     * Compare the analysis with the already notified issues, without changing the state
+     */
+    private computeChanges(
+        results: HealthCheckResult[],
+        events: HealthEvent[],
+        now: Date
+    ): {
+        report: HealthReport | null;
+        nextIssues: Map<HealthCheckId, HealthCheckResult>;
+        nextRetained: Map<HealthCheckId, { reference: HealthReference; until: Date }>;
+    } {
+        const report: HealthReport = { degraded: [], improved: [], recovered: [], events };
+        // Checks without enough data are not in results: their previous state is kept
+        const nextIssues = new Map(this.activeIssues);
+        const nextRetained = new Map(
+            [...this.retainedReferences].filter(([, { until }]) => until >= now)
+        );
+
+        for (const result of results) {
+            const previous = this.activeIssues.get(result.check);
+
+            if (result.severity === null) {
+                if (previous) {
+                    report.recovered.push(result);
+                    nextIssues.delete(result.check);
+                    if (previous.reference !== null) {
+                        // The degraded samples are at most as recent as now, and the baseline
+                        // ends one window before the check time: they leave it after both periods
+                        nextRetained.set(result.check, {
+                            reference: previous.reference,
+                            until: new Date(
+                                now.getTime() +
+                                    this.config.baselineHours * 3600 * 1000 +
+                                    this.config.checkIntervalMs
+                            ),
+                        });
+                    }
+                }
+                continue;
+            }
+
+            // An active issue pins its own reference
+            nextRetained.delete(result.check);
+
+            const previousRank = previous?.severity ? SEVERITY_RANK[previous.severity] : 0;
+            if (SEVERITY_RANK[result.severity] > previousRank) {
+                report.degraded.push(result);
+            } else if (SEVERITY_RANK[result.severity] < previousRank) {
+                report.improved.push(result);
+            }
+            nextIssues.set(result.check, result);
+        }
+
+        const changed =
+            report.degraded.length > 0 ||
+            report.improved.length > 0 ||
+            report.recovered.length > 0 ||
+            report.events.length > 0;
+
+        return { report: changed ? report : null, nextIssues, nextRetained };
+    }
+}

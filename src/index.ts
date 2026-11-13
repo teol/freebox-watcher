@@ -30,6 +30,9 @@ async function start(): Promise<void> {
         // Start downtime monitoring
         fastify.downtimeMonitor.start();
 
+        // Start Freebox health monitoring
+        fastify.healthMonitor.start();
+
         // Start daily chart service
         fastify.dailyChartService.start();
 
@@ -52,7 +55,7 @@ async function shutdown(signal: string): Promise<void> {
 
     try {
         // fastify.close() triggers the onClose hook defined in app.ts,
-        // which stops the downtime monitor and chart services.
+        // which stops the monitors and chart services.
         await fastify.close();
         await closeConnection();
         fastify.log.info('Server shut down successfully');

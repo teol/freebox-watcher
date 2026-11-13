@@ -13,6 +13,7 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 - 🛡️ Rate limiting (5 requests per minute)
 - 📊 MariaDB storage for heartbeat history
 - 🔔 Automatic downtime detection (5 minutes without heartbeat)
+- 🩺 Freebox health alerts (fiber signal, line rate, 4G backup, disk, temperatures, fan, reboots, public IP changes), each one configurable
 - 📲 Telegram notifications for downtime alerts and recovery
 - 🔎 Optional read-only GraphQL API to query heartbeats and downtimes (disabled by default)
 - 📝 Structured logging with Pino
@@ -86,13 +87,37 @@ yarn start
 - `yarn dev` - Run the API directly with ts-node
 - `yarn watch` - Run the API in watch mode with automatic reloads
 - `yarn build` - Compile the TypeScript sources to `dist`
-- `yarn test` - Execute the test suite with Node's test runner
+- `yarn test` - Execute the unit test suite with Node's test runner (no database required)
+- `yarn test:coverage` - Execute the unit test suite with a coverage report
+- `yarn test:integration` - Execute the integration tests against a real MariaDB database (see [Integration Tests](#integration-tests))
 - `yarn db:migrate` - Apply pending database migrations
 - `yarn db:rollback` - Roll back the last batch of migrations
 - `yarn db:status` - Check migration status
 - `yarn db:make <name>` - Create a new migration file
 - `yarn format` - Format the codebase with Prettier
 - `yarn graphql:token` - Generate a GraphQL API token and its hash
+
+### Integration Tests
+
+The integration tests exercise the services, the HTTP API and the GraphQL API against a real MariaDB database. They wipe the tables, so they refuse to run unless `DB_NAME` ends with `_test`. The schema must be created beforehand with `yarn db:migrate`.
+
+For instance with Docker:
+
+```bash
+docker run -d --name freebox-watcher-test-db -p 3307:3306 \
+    -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=freebox_watcher_test \
+    -e MARIADB_USER=freebox_watcher -e MARIADB_PASSWORD=test mariadb:11.4
+```
+
+```bash
+export DB_HOST=127.0.0.1 DB_PORT=3307 DB_USER=freebox_watcher DB_PASSWORD=test DB_NAME=freebox_watcher_test
+```
+
+```bash
+yarn db:migrate && yarn test:integration
+```
+
+The CI runs the unit tests on Node.js 22 and 24, and the integration tests against a MariaDB service container, after checking that every migration can be rolled back and re-applied.
 
 ## Configuration
 
@@ -123,6 +148,12 @@ DOWNTIME_CONFIRMATION_DELAY=1800000
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_CHAT_ID=your-telegram-chat-id
 
+# Freebox health monitoring (optional, every alert enabled by default)
+# See "Health Monitoring" for every alert switch and threshold
+HEALTH_MONITOR_ENABLED=true
+HEALTH_CHECK_INTERVAL=900000
+HEALTH_BASELINE_HOURS=24
+
 # GraphQL API (optional, disabled by default)
 GRAPHQL_ENABLED=false
 GRAPHQL_API_TOKEN_HASH=
@@ -145,6 +176,10 @@ GRAPHQL_RATE_LIMIT=60
 - `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
+- `HEALTH_MONITOR_ENABLED`: Set to `false` to disable the whole health monitor (default: enabled)
+- `HEALTH_CHECK_INTERVAL`: Interval in milliseconds between two health checks, also the length of the analysis window (default: 900000 = 15 minutes, minimum: 60000)
+- `HEALTH_BASELINE_HOURS`: Length in hours of the baseline period the analysis window is compared to (default: 24)
+- `HEALTH_*`: Switch and thresholds of each health alert, see [Health Monitoring](#health-monitoring)
 - `GRAPHQL_ENABLED`: Set to `true` to expose the read-only GraphQL API (default: disabled)
 - `GRAPHQL_API_TOKEN_HASH`: SHA-256 hash of the GraphQL Bearer token, required when the API is enabled (see [GraphQL API](#graphql-api))
 - `GRAPHQL_RATE_LIMIT`: Maximum GraphQL requests per minute per IP address (default: 60)
@@ -708,11 +743,53 @@ Freebox Watcher can send downtime alerts via Telegram. This is optional but high
 
 ### Notification Types
 
-The service sends three types of notifications:
+The service sends the following notifications:
 
 - **🔴 Downtime Detected**: Sent immediately when no heartbeat is received for the configured timeout (default: 5 minutes)
 - **⚠️ Downtime Confirmed**: Sent after the downtime has lasted for the configured confirmation delay (default: 30 minutes)
 - **✅ Service Recovered**: Sent when a heartbeat is received after a downtime event
+- **🆕 New Device Detected**: Sent when an unknown device joins the LAN (see `NEW_DEVICE_NOTIFICATION_ENABLED`)
+- **🚨 Freebox Health Degraded** / **📈 Freebox Health Improving** / **✅ Freebox Health Restored** / **🔔 Freebox Events**: Sent by the health monitor (see below)
+
+### Health Monitoring
+
+Every `HEALTH_CHECK_INTERVAL` (default: 15 minutes), the service analyzes the heartbeats received during the last interval (the analysis window). Most checks use the **median** of the window, which makes them robust to isolated spikes, and some compare it to the median of the preceding `HEALTH_BASELINE_HOURS` (default: 24 hours).
+
+Every alert is **enabled by default** and can be disabled individually by setting its switch to `false`. `HEALTH_MONITOR_ENABLED=false` disables them all.
+
+**Checks** are notified when they become degraded, when their severity worsens or improves, and when they go back to normal:
+
+| Alert              | Switch                       | Heartbeat field         | Warning 🟠 (default)                            | Critical 🔴 (default)          | Threshold variables                                                                   |
+| ------------------ | ---------------------------- | ----------------------- | ----------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------- |
+| Fiber RX power     | `HEALTH_FIBER_ENABLED`       | `sfp_pwr_rx_dbm`        | Below -25 dBm, or 2 dB below the baseline       | Below -27 dBm                  | `HEALTH_FIBER_RX_WARNING_DBM`, `HEALTH_FIBER_RX_CRITICAL_DBM`, `HEALTH_FIBER_DROP_DB` |
+| Fiber TX power     | `HEALTH_FIBER_ENABLED`       | `sfp_pwr_tx_dbm`        | 2 dB below the baseline                         | -                              | `HEALTH_FIBER_DROP_DB`                                                                |
+| Line rate          | `HEALTH_LINE_RATE_ENABLED`   | `bandwidth_down`/`_up`  | 20% below the baseline                          | -                              | `HEALTH_LINE_RATE_DROP_PERCENT`                                                       |
+| Connection media   | `HEALTH_MEDIA_ENABLED`       | `media_state`           | Different from the usual media (e.g. 4G backup) | -                              | -                                                                                     |
+| Disk space         | `HEALTH_DISK_SPACE_ENABLED`  | `disk_used/total_bytes` | 90% used                                        | 95% used                       | `HEALTH_DISK_SPACE_WARNING_PERCENT`, `HEALTH_DISK_SPACE_CRITICAL_PERCENT`             |
+| Disk temperature   | `HEALTH_DISK_TEMP_ENABLED`   | `disk_temp`             | 55°C                                            | 60°C                           | `HEALTH_DISK_TEMP_WARNING`, `HEALTH_DISK_TEMP_CRITICAL`                               |
+| CPU temperature    | `HEALTH_CPU_TEMP_ENABLED`    | `temp_cpu`              | 90°C                                            | 100°C                          | `HEALTH_CPU_TEMP_WARNING`, `HEALTH_CPU_TEMP_CRITICAL`                                 |
+| Switch temperature | `HEALTH_SWITCH_TEMP_ENABLED` | `temp_switch`           | 80°C                                            | 90°C                           | `HEALTH_SWITCH_TEMP_WARNING`, `HEALTH_SWITCH_TEMP_CRITICAL`                           |
+| Fan                | `HEALTH_FAN_ENABLED`         | `fan_rpm`               | -                                               | Stopped while it usually spins | -                                                                                     |
+
+**Events** are notified once, when they happen:
+
+| Event            | Switch                       | Heartbeat field                         | Notified when                                                                        |
+| ---------------- | ---------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ |
+| Reboot           | `HEALTH_REBOOT_ENABLED`      | `uptime`                                | The uptime counter resets between two heartbeats                                     |
+| Public IP change | `HEALTH_PUBLIC_IP_ENABLED`   | `ipv4`, `ipv6`                          | The public IPv4 or IPv6 address changes (both addresses are included in the message) |
+| Disk errors      | `HEALTH_DISK_ERRORS_ENABLED` | `disk_read_errors`, `disk_write_errors` | A disk error counter increases                                                       |
+
+The temperature thresholds are conservative defaults: check the usual values of your Freebox in the `heartbeats` table and adjust them if needed. The fan alert assumes the fan always spins: if yours legitimately stops when the box is cool, set `HEALTH_FAN_ENABLED=false`.
+
+To avoid alert storms, every check run sends at most one aggregated message, and only for changes:
+
+- While a relative check is degraded, its reference (baseline value, usual media, usual fan speed) stays pinned to the value it had when the degradation started, so that a long degradation never becomes the new normal. After the recovery, that reference is kept until the baseline no longer holds the degraded values (one baseline period plus one check interval).
+- A degraded check only recovers, or improves, once its value goes back past its threshold by a small margin (0.5 dB, 2°C, 1% of disk space, 2% of line rate, capped at half the configured drop thresholds), so that a value hovering around a threshold does not flap.
+- Events are detected on every heartbeat received since the last processed one, so that none is missed between two runs or by a failed run, including the very first one.
+- The alert state is only updated once Telegram confirms the delivery: a failed notification is sent again on the next run.
+- A check is skipped while there is not enough data (at least 3 samples in the window, and 12 in the baseline for the checks relying on it), for instance during a downtime, and its previous state is kept.
+
+The state is kept in memory: an ongoing degradation is notified again after a restart.
 
 ### Disabling Notifications
 

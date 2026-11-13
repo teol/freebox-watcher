@@ -5,6 +5,7 @@ import type {
     DevicesTable,
     DevicesInsert,
 } from '../types/database.js';
+import { HEALTH_SAMPLE_COLUMNS, type HealthSample } from './healthChecks.js';
 
 export interface ActiveDevice {
     mac: string;
@@ -118,15 +119,24 @@ export interface HeartbeatInput {
 }
 
 /**
+ * Decode a JSON column, which the driver may return either as a raw string or already parsed
+ */
+function parseJsonColumn<T>(value: unknown): T | null {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    return (typeof value === 'string' ? JSON.parse(value) : value) as T;
+}
+
+/**
  * Converts a raw heartbeats row into a HeartbeatRecord (parses JSON columns)
  */
 function toHeartbeatRecord(heartbeat: HeartbeatsTable): HeartbeatRecord {
     return {
         ...heartbeat,
-        active_devices: heartbeat.active_devices
-            ? (JSON.parse(heartbeat.active_devices) as ActiveDevice[])
-            : null,
-        metadata: heartbeat.metadata ? JSON.parse(heartbeat.metadata) : null,
+        active_devices: parseJsonColumn<ActiveDevice[]>(heartbeat.active_devices),
+        metadata: parseJsonColumn<Record<string, unknown>>(heartbeat.metadata),
     };
 }
 
@@ -338,6 +348,22 @@ export class HeartbeatService {
             ])
             .limit(limit)
             .offset(offset);
+    }
+
+    /**
+     * Get the columns needed for the health analysis within a time range
+     * @param startDate Start date
+     * @param endDate End date
+     * @returns Array of health samples ordered by timestamp ascending
+     */
+    async getHealthSamples(startDate: Date, endDate: Date): Promise<HealthSample[]> {
+        return await db<HeartbeatsTable>('heartbeats')
+            .select(HEALTH_SAMPLE_COLUMNS)
+            .whereBetween('timestamp', [startDate, endDate])
+            .orderBy([
+                { column: 'timestamp', order: 'asc' },
+                { column: 'id', order: 'asc' },
+            ]);
     }
 
     /**
