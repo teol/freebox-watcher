@@ -1,6 +1,6 @@
-import { ChartConfiguration } from 'chart.js';
+import type { ChartConfiguration } from 'chart.js';
 import { BaseChartService, CHART_WATERMARK } from './baseChart.js';
-import { HeartbeatService, type HeartbeatRecord } from './heartbeat.js';
+import type { HeartbeatService, HeartbeatRecord } from './heartbeat.js';
 
 /**
  * Service for generating and sending daily heartbeat rate charts to Discord

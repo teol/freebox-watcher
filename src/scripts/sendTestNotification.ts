@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../utils/loadEnv.js';
 import { NotificationService } from '../services/notification.js';
 import { logger } from '../utils/logger.js';
 

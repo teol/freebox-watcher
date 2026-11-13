@@ -1,6 +1,6 @@
 import { describe, it, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert';
-import { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { createApp } from '../../src/app.js';
 import { API_PREFIX } from '../../src/constants/api.js';
 import { hashToken } from '../../src/middleware/bearerAuth.js';
@@ -177,7 +177,7 @@ describe('API (database)', () => {
 
         assert.strictEqual(body.errors, undefined, JSON.stringify(body.errors));
         assert.deepStrictEqual(body.data?.lastHeartbeat, {
-            id: (body.data?.lastHeartbeat as { id: string }).id,
+            id: (body.data?.lastHeartbeat as { id: string } | undefined)?.id,
             status: 'up',
             timestamp: '2026-11-13T10:00:00.000Z',
             bytesDown: 1_142_257_499_691,

@@ -2,7 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { heartbeatRoutes } from '../src/routes/heartbeat.js';
-import { type HeartbeatInput, type ActiveDevice } from '../src/services/heartbeat.js';
+import type { HeartbeatInput, ActiveDevice } from '../src/services/heartbeat.js';
 import { NotificationService } from '../src/services/notification.js';
 import { DowntimeMonitor } from '../src/services/downtimeMonitor.js';
 import { registerRawBodyCapture } from '../src/middleware/rawBodyCapture.js';

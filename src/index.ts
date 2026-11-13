@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './utils/loadEnv.js';
 import { createApp } from './app.js';
 import { testConnection, closeConnection } from './db/config.js';
 

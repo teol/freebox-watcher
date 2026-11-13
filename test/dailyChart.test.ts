@@ -1,11 +1,11 @@
-import { describe, it, before, after, mock, beforeEach, afterEach } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
 import { BaseChartService } from '../src/services/baseChart.js';
 import { DailyChartService } from '../src/services/dailyChart.js';
 import { HeartbeatService } from '../src/services/heartbeat.js';
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 describe('DailyChartService', () => {
     let heartbeatService: HeartbeatService;
@@ -365,7 +365,9 @@ describe('DailyChartService', () => {
         const originalFetch = global.fetch;
         let capturedPayloadJson = '';
         global.fetch = async (_url, init) => {
-            capturedPayloadJson = (init?.body as FormData).get('payload_json') as string;
+            capturedPayloadJson = ((init as RequestInit).body as FormData).get(
+                'payload_json'
+            ) as string;
             return { ok: true, status: 200, statusText: 'OK', text: async () => '' } as Response;
         };
 

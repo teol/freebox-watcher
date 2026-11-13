@@ -1,4 +1,4 @@
-import { type FastifyBaseLogger, type FastifyPluginAsync } from 'fastify';
+import type { FastifyBaseLogger, FastifyPluginAsync } from 'fastify';
 import {
     execute,
     GraphQLError,

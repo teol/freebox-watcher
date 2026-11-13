@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../utils/loadEnv.js';
 import knex, { type Knex } from 'knex';
 import knexConfig from '../../knexfile.js';
 

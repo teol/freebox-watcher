@@ -1,4 +1,4 @@
-import { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 
 /**
  * Creates the error Fastify itself raises when a body exceeds the route limit
@@ -20,7 +20,7 @@ function createBodyTooLargeError(limit: number): Error & { statusCode: number; c
  * @param fastify Fastify instance
  */
 export async function registerRawBodyCapture(fastify: FastifyInstance): Promise<void> {
-    fastify.addHook('preParsing', async (request, reply, payload) => {
+    fastify.addHook('preParsing', async (request, _reply, payload) => {
         if (request.headers['content-type']?.includes('application/json')) {
             const limit = request.routeOptions.bodyLimit;
             if (Number(request.headers['content-length']) > limit) {

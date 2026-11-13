@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { type FastifyReply, type FastifyRequest, type HookHandlerDoneFunction } from 'fastify';
+import type { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from 'fastify';
 import { API_PREFIX } from '../constants/api.js';
 
 /**

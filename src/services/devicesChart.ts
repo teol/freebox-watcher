@@ -1,7 +1,7 @@
-import { ChartConfiguration } from 'chart.js';
+import type { ChartConfiguration } from 'chart.js';
 import { logger } from '../utils/logger.js';
 import { BaseChartService, CHART_WATERMARK } from './baseChart.js';
-import { HeartbeatService, type HeartbeatRecord } from './heartbeat.js';
+import type { HeartbeatService, HeartbeatRecord } from './heartbeat.js';
 
 /**
  * Service for generating and sending connected devices charts to Discord.

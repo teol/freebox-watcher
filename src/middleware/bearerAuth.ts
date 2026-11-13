@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { type FastifyReply, type preParsingHookHandler } from 'fastify';
+import type { FastifyReply, preParsingHookHandler } from 'fastify';
 
 /**
  * Length of a SHA-256 digest in bytes
