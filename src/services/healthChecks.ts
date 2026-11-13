@@ -114,6 +114,11 @@ export interface HealthChecksConfig {
     fan: ToggleConfig;
 }
 
+/**
+ * Usual value a relative check compares the current one to (median or most frequent value)
+ */
+export type HealthReference = number | string;
+
 export interface HealthCheckResult {
     check: HealthCheckId;
     label: string;
@@ -123,11 +128,32 @@ export interface HealthCheckResult {
     severity: HealthSeverity | null;
     /** Why the check is degraded, null when healthy */
     reason: string | null;
+    /** Usual value the current one was compared to, null for absolute thresholds */
+    reference: HealthReference | null;
+}
+
+/**
+ * State of a degraded check carried over from the previous runs
+ */
+export interface ActiveIssue {
+    severity: HealthSeverity;
+    /** Reference pinned when the degradation started */
+    reference: HealthReference | null;
+}
+
+export interface HealthAnalysisOptions {
+    /**
+     * Checks currently degraded. Their reference stays pinned, so that a long degradation does
+     * not become the new normal, and they only recover past a small margin (hysteresis).
+     */
+    activeIssues?: Partial<Record<HealthCheckId, ActiveIssue>>;
+    /** Events are detected on samples strictly newer than this date (default: the window start) */
+    eventsAfter?: Date | null;
 }
 
 export interface HealthEvent {
     kind: HealthEventKind;
-    /** Timestamp of the heartbeat that revealed the event, used to notify each event once */
+    /** Timestamp of the heartbeat that revealed the event */
     sampleAt: Date;
     message: string;
 }
@@ -135,7 +161,7 @@ export interface HealthEvent {
 export interface HealthAnalysis {
     /** Results of the enabled checks that had enough data to be evaluated */
     results: HealthCheckResult[];
-    /** Events revealed by the heartbeats of the analysis window */
+    /** Events revealed by the heartbeats newer than eventsAfter */
     events: HealthEvent[];
 }
 
@@ -148,6 +174,18 @@ export const MIN_WINDOW_SAMPLES = 3;
  * Minimum number of samples in the baseline to evaluate a check relative to the baseline
  */
 export const MIN_BASELINE_SAMPLES = 12;
+
+/**
+ * Margins a degraded value must go back past before the check recovers or improves
+ */
+export const HYSTERESIS = {
+    dbm: 0.5,
+    temperature: 2,
+    diskPercent: 1,
+    lineRatePercent: 2,
+};
+
+const SEVERITY_RANK: Record<HealthSeverity, number> = { warning: 1, critical: 2 };
 
 type NumericColumn = {
     [K in keyof HealthSample]: HealthSample[K] extends number | null ? K : never;
@@ -165,6 +203,28 @@ export function median(values: number[]): number | null {
     const middle = Math.floor(sorted.length / 2);
 
     return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+/**
+ * Severity of a value where higher is worse. While a level is active, the value has to go
+ * back below its threshold minus the margin to leave it, which prevents flapping.
+ */
+export function severityFor(
+    value: number,
+    warning: number,
+    critical: number,
+    margin: number,
+    active: HealthSeverity | null | undefined
+): HealthSeverity | null {
+    const activeRank = active ? SEVERITY_RANK[active] : 0;
+
+    if (value >= critical - (activeRank >= SEVERITY_RANK.critical ? margin : 0)) {
+        return 'critical';
+    }
+    if (value >= warning - (activeRank >= SEVERITY_RANK.warning ? margin : 0)) {
+        return 'warning';
+    }
+    return null;
 }
 
 /**
@@ -213,63 +273,85 @@ function windowMedian(samples: HealthSample[], column: NumericColumn): number | 
     return values.length >= MIN_WINDOW_SAMPLES ? median(values) : null;
 }
 
+function pinnedNumber(issue: ActiveIssue | undefined): number | null {
+    return typeof issue?.reference === 'number' ? issue.reference : null;
+}
+
 function checkFiberRx(
     window: HealthSample[],
     baseline: HealthSample[],
-    config: HealthChecksConfig
+    config: HealthChecksConfig,
+    active: ActiveIssue | undefined
 ): HealthCheckResult | null {
     const current = windowMedian(window, 'sfp_pwr_rx_dbm');
     if (current === null) {
         return null;
     }
 
-    const { rxCriticalDbm, rxWarningDbm, dropDb } = config.fiber;
-    const reference = baselineMedian(baseline, 'sfp_pwr_rx_dbm');
-    const result: HealthCheckResult = {
+    const { rxWarningDbm, rxCriticalDbm, dropDb } = config.fiber;
+    const reference = pinnedNumber(active) ?? baselineMedian(baseline, 'sfp_pwr_rx_dbm');
+    // Lower is worse for optical power: the opposite values are compared
+    const absolute = severityFor(
+        -current,
+        -rxWarningDbm,
+        -rxCriticalDbm,
+        HYSTERESIS.dbm,
+        active?.severity
+    );
+    const drop =
+        reference === null
+            ? null
+            : severityFor(reference - current, dropDb, Infinity, HYSTERESIS.dbm, active?.severity);
+
+    let reason: string | null = null;
+    if (absolute !== null) {
+        const threshold = absolute === 'critical' ? rxCriticalDbm : rxWarningDbm;
+        reason = `${absolute} threshold: ${formatDbm(threshold)}`;
+    } else if (drop !== null && reference !== null) {
+        reason = `${(reference - current).toFixed(1)} dB below baseline (${formatDbm(reference)})`;
+    }
+
+    return {
         check: 'fiber_rx',
         label: 'Fiber RX power',
         current: formatDbm(current),
-        severity: null,
-        reason: null,
+        severity: absolute ?? drop,
+        reason,
+        reference,
     };
-
-    if (current < rxCriticalDbm) {
-        result.severity = 'critical';
-        result.reason = `below critical threshold of ${formatDbm(rxCriticalDbm)}`;
-    } else if (current < rxWarningDbm) {
-        result.severity = 'warning';
-        result.reason = `below warning threshold of ${formatDbm(rxWarningDbm)}`;
-    } else if (reference !== null && reference - current >= dropDb) {
-        result.severity = 'warning';
-        result.reason = `${(reference - current).toFixed(1)} dB below ${config.baselineHours}h baseline (${formatDbm(reference)})`;
-    }
-
-    return result;
 }
 
 function checkFiberTx(
     window: HealthSample[],
     baseline: HealthSample[],
-    config: HealthChecksConfig
+    config: HealthChecksConfig,
+    active: ActiveIssue | undefined
 ): HealthCheckResult | null {
     const current = windowMedian(window, 'sfp_pwr_tx_dbm');
-    const reference = baselineMedian(baseline, 'sfp_pwr_tx_dbm');
+    const reference = pinnedNumber(active) ?? baselineMedian(baseline, 'sfp_pwr_tx_dbm');
 
     // TX power has no universal absolute threshold, only a drop relative to the baseline is checked
     if (current === null || reference === null) {
         return null;
     }
 
-    const degraded = reference - current >= config.fiber.dropDb;
+    const severity = severityFor(
+        reference - current,
+        config.fiber.dropDb,
+        Infinity,
+        HYSTERESIS.dbm,
+        active?.severity
+    );
 
     return {
         check: 'fiber_tx',
         label: 'Fiber TX power',
         current: formatDbm(current),
-        severity: degraded ? 'warning' : null,
-        reason: degraded
-            ? `${(reference - current).toFixed(1)} dB below ${config.baselineHours}h baseline (${formatDbm(reference)})`
+        severity,
+        reason: severity
+            ? `${(reference - current).toFixed(1)} dB below baseline (${formatDbm(reference)})`
             : null,
+        reference,
     };
 }
 
@@ -277,50 +359,49 @@ function checkLineRate(
     window: HealthSample[],
     baseline: HealthSample[],
     config: HealthChecksConfig,
-    direction: 'down' | 'up'
+    direction: 'down' | 'up',
+    active: ActiveIssue | undefined
 ): HealthCheckResult | null {
     const column = direction === 'down' ? 'bandwidth_down' : 'bandwidth_up';
     const current = windowMedian(window, column);
-    const reference = baselineMedian(baseline, column);
+    const reference = pinnedNumber(active) ?? baselineMedian(baseline, column);
 
     if (current === null || reference === null || reference <= 0) {
         return null;
     }
 
     const dropPercent = ((reference - current) / reference) * 100;
-    const degraded = dropPercent >= config.lineRate.dropPercent;
+    const severity = severityFor(
+        dropPercent,
+        config.lineRate.dropPercent,
+        Infinity,
+        HYSTERESIS.lineRatePercent,
+        active?.severity
+    );
 
     return {
         check: direction === 'down' ? 'line_rate_down' : 'line_rate_up',
         label: direction === 'down' ? 'Line rate (down)' : 'Line rate (up)',
         current: formatBitrate(current),
-        severity: degraded ? 'warning' : null,
-        reason: degraded
-            ? `${dropPercent.toFixed(0)}% below ${config.baselineHours}h baseline (${formatBitrate(reference)})`
+        severity,
+        reason: severity
+            ? `${dropPercent.toFixed(0)}% below baseline (${formatBitrate(reference)})`
             : null,
+        reference,
     };
 }
 
-function checkMedia(
-    window: HealthSample[],
-    baseline: HealthSample[],
-    config: HealthChecksConfig
-): HealthCheckResult | null {
-    let current: string | null = null;
-    for (let i = window.length - 1; i >= 0 && current === null; i--) {
-        current = window[i].media_state || null;
-    }
-    if (current === null) {
-        return null;
-    }
-
-    // Most frequent media over the baseline (e.g. 'ftth'), the usual one
+/**
+ * Most frequent media over the baseline (e.g. 'ftth'), null without enough samples
+ */
+function usualMedia(baseline: HealthSample[]): string | null {
     const counts = new Map<string, number>();
     for (const sample of baseline) {
         if (sample.media_state) {
             counts.set(sample.media_state, (counts.get(sample.media_state) ?? 0) + 1);
         }
     }
+
     let usual: string | null = null;
     let usualCount = 0;
     for (const [media, count] of counts) {
@@ -330,18 +411,36 @@ function checkMedia(
         }
     }
 
-    if (usual === null || usualCount < MIN_BASELINE_SAMPLES) {
+    return usualCount >= MIN_BASELINE_SAMPLES ? usual : null;
+}
+
+function checkMedia(
+    window: HealthSample[],
+    baseline: HealthSample[],
+    config: HealthChecksConfig,
+    active: ActiveIssue | undefined
+): HealthCheckResult | null {
+    let current: string | null = null;
+    for (let i = window.length - 1; i >= 0 && current === null; i--) {
+        current = window[i].media_state || null;
+    }
+
+    const pinned = typeof active?.reference === 'string' ? active.reference : null;
+    const usual = pinned ?? usualMedia(baseline);
+    if (current === null || usual === null) {
         return null;
     }
 
     const degraded = current !== usual;
+    const period = pinned ? 'before the change' : `over the last ${config.baselineHours}h`;
 
     return {
         check: 'media',
         label: 'Connection media',
         current,
         severity: degraded ? 'warning' : null,
-        reason: degraded ? `usual media over the last ${config.baselineHours}h is ${usual}` : null,
+        reason: degraded ? `usual media ${period} is ${usual}` : null,
+        reference: usual,
     };
 }
 
@@ -350,35 +449,36 @@ function checkTemperature(
     column: 'temp_cpu' | 'temp_switch' | 'disk_temp',
     check: HealthCheckId,
     label: string,
-    thresholds: TemperatureConfig
+    thresholds: TemperatureConfig,
+    active: ActiveIssue | undefined
 ): HealthCheckResult | null {
     const current = windowMedian(window, column);
     if (current === null) {
         return null;
     }
 
-    const result: HealthCheckResult = {
+    const severity = severityFor(
+        current,
+        thresholds.warning,
+        thresholds.critical,
+        HYSTERESIS.temperature,
+        active?.severity
+    );
+
+    return {
         check,
         label,
         current: `${current.toFixed(0)}°C`,
-        severity: null,
-        reason: null,
+        severity,
+        reason: severity ? `${severity} threshold: ${thresholds[severity]}°C` : null,
+        reference: null,
     };
-
-    if (current >= thresholds.critical) {
-        result.severity = 'critical';
-        result.reason = `at or above critical threshold of ${thresholds.critical}°C`;
-    } else if (current >= thresholds.warning) {
-        result.severity = 'warning';
-        result.reason = `at or above warning threshold of ${thresholds.warning}°C`;
-    }
-
-    return result;
 }
 
 function checkDiskSpace(
     window: HealthSample[],
-    config: HealthChecksConfig
+    config: HealthChecksConfig,
+    active: ActiveIssue | undefined
 ): HealthCheckResult | null {
     // Disk usage changes slowly and is not noisy: the latest value is the most relevant
     const latest = [...window]
@@ -394,31 +494,39 @@ function checkDiskSpace(
     const { warningPercent, criticalPercent } = config.diskSpace;
     const usedPercent = (latest.disk_used_bytes / latest.disk_total_bytes) * 100;
     const freeBytes = Math.max(latest.disk_total_bytes - latest.disk_used_bytes, 0);
-    const result: HealthCheckResult = {
+    const severity = severityFor(
+        usedPercent,
+        warningPercent,
+        criticalPercent,
+        HYSTERESIS.diskPercent,
+        active?.severity
+    );
+    const threshold = severity === 'critical' ? criticalPercent : warningPercent;
+
+    return {
         check: 'disk_space',
         label: 'Disk space',
         current: `${usedPercent.toFixed(1)}% used (${formatBytes(freeBytes)} free)`,
-        severity: null,
-        reason: null,
+        severity,
+        reason: severity ? `${severity} threshold: ${threshold}%` : null,
+        reference: null,
     };
-
-    if (usedPercent >= criticalPercent) {
-        result.severity = 'critical';
-        result.reason = `at or above critical threshold of ${criticalPercent}%`;
-    } else if (usedPercent >= warningPercent) {
-        result.severity = 'warning';
-        result.reason = `at or above warning threshold of ${warningPercent}%`;
-    }
-
-    return result;
 }
 
-function checkFan(window: HealthSample[], baseline: HealthSample[]): HealthCheckResult | null {
+function checkFan(
+    window: HealthSample[],
+    baseline: HealthSample[],
+    active: ActiveIssue | undefined
+): HealthCheckResult | null {
     const current = windowMedian(window, 'fan_rpm');
-    const reference = baselineMedian(baseline, 'fan_rpm');
 
-    // Only a fan that usually spins and stopped is reported, the speed itself varies with load
-    if (current === null || reference === null || reference <= 0) {
+    // The usual speed only comes from the samples where the fan spins, so that a long stop does
+    // not make the fan look absent. Boxes without enough such samples are not checked.
+    const spinning = numericValues(baseline, 'fan_rpm').filter((rpm) => rpm > 0);
+    const usual =
+        pinnedNumber(active) ?? (spinning.length >= MIN_BASELINE_SAMPLES ? median(spinning) : null);
+
+    if (current === null || usual === null) {
         return null;
     }
 
@@ -429,14 +537,15 @@ function checkFan(window: HealthSample[], baseline: HealthSample[]): HealthCheck
         label: 'Fan',
         current: `${current.toFixed(0)} rpm`,
         severity: stopped ? 'critical' : null,
-        reason: stopped ? `fan stopped (usually ${reference.toFixed(0)} rpm)` : null,
+        reason: stopped ? `fan stopped (usually ${usual.toFixed(0)} rpm)` : null,
+        reference: usual,
     };
 }
 
 /**
  * Detect Freebox reboots: the uptime counter going backwards between two consecutive heartbeats
  */
-function detectReboots(samples: HealthSample[], windowStart: Date): HealthEvent[] {
+function detectReboots(samples: HealthSample[], eventsAfter: Date): HealthEvent[] {
     const events: HealthEvent[] = [];
     let previousUptime: number | null = null;
 
@@ -448,7 +557,7 @@ function detectReboots(samples: HealthSample[], windowStart: Date): HealthEvent[
         if (
             previousUptime !== null &&
             sample.uptime < previousUptime &&
-            sample.timestamp.getTime() >= windowStart.getTime()
+            sample.timestamp.getTime() > eventsAfter.getTime()
         ) {
             const bootAt = new Date(sample.timestamp.getTime() - sample.uptime * 1000);
             events.push({
@@ -469,7 +578,7 @@ function detectReboots(samples: HealthSample[], windowStart: Date): HealthEvent[
  */
 function detectIpChanges(
     samples: HealthSample[],
-    windowStart: Date,
+    eventsAfter: Date,
     column: 'ipv4' | 'ipv6'
 ): HealthEvent[] {
     const events: HealthEvent[] = [];
@@ -484,7 +593,7 @@ function detectIpChanges(
         if (
             previous !== null &&
             current !== previous &&
-            sample.timestamp.getTime() >= windowStart.getTime()
+            sample.timestamp.getTime() > eventsAfter.getTime()
         ) {
             events.push({
                 kind: column === 'ipv4' ? 'public_ipv4' : 'public_ipv6',
@@ -500,10 +609,10 @@ function detectIpChanges(
 }
 
 /**
- * Detect disk error counters increasing within the analysis window, aggregated in one event.
+ * Detect disk error counters increasing after eventsAfter, aggregated in one event.
  * Counters going backwards (reset by a reboot) are ignored.
  */
-function detectDiskErrors(samples: HealthSample[], windowStart: Date): HealthEvent[] {
+function detectDiskErrors(samples: HealthSample[], eventsAfter: Date): HealthEvent[] {
     const increases = { read: 0, write: 0 };
     const totals = { read: 0, write: 0 };
     let lastIncreaseAt: Date | null = null;
@@ -523,7 +632,7 @@ function detectDiskErrors(samples: HealthSample[], windowStart: Date): HealthEve
             if (
                 previous !== null &&
                 current > previous &&
-                sample.timestamp.getTime() >= windowStart.getTime()
+                sample.timestamp.getTime() > eventsAfter.getTime()
             ) {
                 increases[direction] += current - previous;
                 totals[direction] = current;
@@ -558,44 +667,62 @@ function detectDiskErrors(samples: HealthSample[], windowStart: Date): HealthEve
  * @param samples Heartbeats covering the baseline and the analysis window, ordered by timestamp
  * @param windowStart Start of the analysis window; older samples make up the baseline
  * @param config Enabled checks and their thresholds
+ * @param options State carried over from the previous runs
  */
 export function analyzeHealth(
     samples: HealthSample[],
     windowStart: Date,
-    config: HealthChecksConfig
+    config: HealthChecksConfig,
+    options: HealthAnalysisOptions = {}
 ): HealthAnalysis {
     const baseline = samples.filter((s) => s.timestamp.getTime() < windowStart.getTime());
     const window = samples.filter((s) => s.timestamp.getTime() >= windowStart.getTime());
+    const active = options.activeIssues ?? {};
+    const eventsAfter = options.eventsAfter ?? new Date(windowStart.getTime() - 1);
 
     const results: (HealthCheckResult | null)[] = [];
     const events: HealthEvent[] = [];
 
     if (config.fiber.enabled) {
         results.push(
-            checkFiberRx(window, baseline, config),
-            checkFiberTx(window, baseline, config)
+            checkFiberRx(window, baseline, config, active.fiber_rx),
+            checkFiberTx(window, baseline, config, active.fiber_tx)
         );
     }
     if (config.lineRate.enabled) {
         results.push(
-            checkLineRate(window, baseline, config, 'down'),
-            checkLineRate(window, baseline, config, 'up')
+            checkLineRate(window, baseline, config, 'down', active.line_rate_down),
+            checkLineRate(window, baseline, config, 'up', active.line_rate_up)
         );
     }
     if (config.media.enabled) {
-        results.push(checkMedia(window, baseline, config));
+        results.push(checkMedia(window, baseline, config, active.media));
     }
     if (config.diskSpace.enabled) {
-        results.push(checkDiskSpace(window, config));
+        results.push(checkDiskSpace(window, config, active.disk_space));
     }
     if (config.diskTemp.enabled) {
         results.push(
-            checkTemperature(window, 'disk_temp', 'disk_temp', 'Disk temperature', config.diskTemp)
+            checkTemperature(
+                window,
+                'disk_temp',
+                'disk_temp',
+                'Disk temperature',
+                config.diskTemp,
+                active.disk_temp
+            )
         );
     }
     if (config.cpuTemp.enabled) {
         results.push(
-            checkTemperature(window, 'temp_cpu', 'cpu_temp', 'CPU temperature', config.cpuTemp)
+            checkTemperature(
+                window,
+                'temp_cpu',
+                'cpu_temp',
+                'CPU temperature',
+                config.cpuTemp,
+                active.cpu_temp
+            )
         );
     }
     if (config.switchTemp.enabled) {
@@ -605,25 +732,26 @@ export function analyzeHealth(
                 'temp_switch',
                 'switch_temp',
                 'Switch temperature',
-                config.switchTemp
+                config.switchTemp,
+                active.switch_temp
             )
         );
     }
     if (config.fan.enabled) {
-        results.push(checkFan(window, baseline));
+        results.push(checkFan(window, baseline, active.fan));
     }
 
     if (config.reboot.enabled) {
-        events.push(...detectReboots(samples, windowStart));
+        events.push(...detectReboots(samples, eventsAfter));
     }
     if (config.publicIp.enabled) {
         events.push(
-            ...detectIpChanges(samples, windowStart, 'ipv4'),
-            ...detectIpChanges(samples, windowStart, 'ipv6')
+            ...detectIpChanges(samples, eventsAfter, 'ipv4'),
+            ...detectIpChanges(samples, eventsAfter, 'ipv6')
         );
     }
     if (config.diskErrors.enabled) {
-        events.push(...detectDiskErrors(samples, windowStart));
+        events.push(...detectDiskErrors(samples, eventsAfter));
     }
 
     return {

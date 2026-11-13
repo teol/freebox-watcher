@@ -2,7 +2,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ActiveDevice } from './heartbeat.js';
 import type { HealthReport } from './healthMonitor.js';
-import type { HealthEventKind } from './healthChecks.js';
+import type { HealthCheckResult, HealthEventKind } from './healthChecks.js';
 
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
@@ -82,10 +82,11 @@ export class NotificationService {
 
     /**
      * Send a message via Telegram
+     * @returns Whether the message was delivered
      */
-    private async sendMessage(message: string): Promise<void> {
+    private async sendMessage(message: string): Promise<boolean> {
         if (!this.enabled || !this.bot || !this.chatId) {
-            return;
+            return false;
         }
 
         try {
@@ -93,8 +94,10 @@ export class NotificationService {
                 parse_mode: 'Markdown',
             });
             this.logger.debug({ chatId: this.chatId }, 'Telegram message sent');
+            return true;
         } catch (error) {
             this.logger.error({ error }, 'Failed to send Telegram message');
+            return false;
         }
     }
 
@@ -206,12 +209,18 @@ export class NotificationService {
 
     /**
      * Send a single notification summarizing the Freebox health changes
+     * @returns Whether the notification was delivered (true when there is nothing to send)
      */
-    async sendHealthAlert(report: HealthReport): Promise<void> {
-        const { degraded, recovered, events } = report;
+    async sendHealthAlert(report: HealthReport): Promise<boolean> {
+        const { degraded, improved, recovered, events } = report;
 
-        if (degraded.length === 0 && recovered.length === 0 && events.length === 0) {
-            return;
+        if (
+            degraded.length === 0 &&
+            improved.length === 0 &&
+            recovered.length === 0 &&
+            events.length === 0
+        ) {
+            return true;
         }
 
         let title = '🔔 *Freebox Events*';
@@ -219,15 +228,19 @@ export class NotificationService {
             title = '🚨 *Freebox Health Degraded*';
         } else if (recovered.length > 0) {
             title = '✅ *Freebox Health Restored*';
+        } else if (improved.length > 0) {
+            title = '📈 *Freebox Health Improving*';
         }
 
+        const severityLines = (result: HealthCheckResult, suffix: string): string =>
+            [
+                `${result.severity === 'critical' ? '🔴' : '🟠'} *${result.label}*: ${escapeMarkdown(result.current)}${suffix}`,
+                `    ${escapeMarkdown(result.reason)}`,
+            ].join('\n');
+
         const lines = [
-            ...degraded.map((result) =>
-                [
-                    `${result.severity === 'critical' ? '🔴' : '🟠'} *${result.label}*: ${escapeMarkdown(result.current)}`,
-                    `    ${escapeMarkdown(result.reason)}`,
-                ].join('\n')
-            ),
+            ...degraded.map((result) => severityLines(result, '')),
+            ...improved.map((result) => severityLines(result, ' (improved)')),
             ...recovered.map(
                 (result) =>
                     `✅ *${result.label}*: back to normal (${escapeMarkdown(result.current)})`
@@ -235,7 +248,7 @@ export class NotificationService {
             ...events.map((event) => `${EVENT_ICONS[event.kind]} ${escapeMarkdown(event.message)}`),
         ];
 
-        await this.sendMessage([title, '', ...lines].join('\n'));
+        return await this.sendMessage([title, '', ...lines].join('\n'));
     }
 
     /**

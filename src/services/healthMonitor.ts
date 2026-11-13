@@ -3,10 +3,12 @@ import type { HeartbeatService } from './heartbeat.js';
 import type { NotificationService } from './notification.js';
 import {
     analyzeHealth,
+    type ActiveIssue,
     type HealthChecksConfig,
     type HealthCheckId,
     type HealthCheckResult,
     type HealthEvent,
+    type HealthSeverity,
     type TemperatureConfig,
 } from './healthChecks.js';
 
@@ -18,13 +20,17 @@ export interface HealthMonitorConfig extends HealthChecksConfig {
 }
 
 export interface HealthReport {
-    /** Checks that became degraded or whose severity changed */
+    /** Checks that became degraded or whose severity worsened */
     degraded: HealthCheckResult[];
+    /** Checks still degraded but whose severity improved */
+    improved: HealthCheckResult[];
     /** Checks that went back to normal */
     recovered: HealthCheckResult[];
     /** Newly detected events */
     events: HealthEvent[];
 }
+
+const SEVERITY_RANK: Record<HealthSeverity, number> = { warning: 1, critical: 2 };
 
 const ALERT_KEYS = [
     'fiber',
@@ -147,13 +153,16 @@ export function loadHealthMonitorConfig(): HealthMonitorConfig {
  * HealthMonitor periodically analyzes recent heartbeats and sends a Telegram notification when
  * the Freebox health degrades (fiber signal, line rate, disk, temperatures...) or when a notable
  * event happens (reboot, public IP change, disk errors).
- * Only changes are notified (degraded, severity change, recovered, new event) to avoid alert storms.
+ * Only changes are notified (degraded, severity change, recovered, new event) to avoid alert
+ * storms. The state is only committed once the notification is delivered, so that a failed
+ * delivery is retried on the next run.
  */
 export class HealthMonitor {
     private timeoutId: NodeJS.Timeout | null = null;
     // Degraded checks already notified; kept in memory, so an ongoing degradation is notified again after a restart
-    private readonly activeIssues = new Map<HealthCheckId, HealthCheckResult>();
-    private lastEventSampleAt: Date | null = null;
+    private activeIssues = new Map<HealthCheckId, HealthCheckResult>();
+    // Timestamp of the latest heartbeat whose events were processed, the next run resumes after it
+    private lastProcessedSampleAt: Date | null = null;
     private readonly logger: FastifyBaseLogger;
     private readonly notificationService: NotificationService;
     private readonly heartbeatService: HeartbeatService;
@@ -233,7 +242,7 @@ export class HealthMonitor {
     /**
      * Analyze the recent heartbeats and notify the health changes since the previous check
      * @param now Reference time of the check
-     * @returns The notified changes, or null when nothing changed
+     * @returns The changes found, or null when nothing changed
      */
     async check(now: Date = new Date()): Promise<HealthReport | null> {
         const windowStart = new Date(now.getTime() - this.config.checkIntervalMs);
@@ -241,68 +250,107 @@ export class HealthMonitor {
             windowStart.getTime() - this.config.baselineHours * 3600 * 1000
         );
 
-        const samples = await this.heartbeatService.getHealthSamples(baselineStart, now);
-        const analysis = analyzeHealth(samples, windowStart, this.config);
-        const report = this.diff(analysis.results, analysis.events);
+        // Events resume after the last processed heartbeat, so that none falls between two runs
+        // or is lost by a failed run; older ones than the fetched range cannot be analyzed
+        const eventsAfter =
+            this.lastProcessedSampleAt === null
+                ? new Date(windowStart.getTime() - 1)
+                : new Date(Math.max(this.lastProcessedSampleAt.getTime(), baselineStart.getTime()));
 
-        if (!report) {
+        const samples = await this.heartbeatService.getHealthSamples(baselineStart, now);
+        const analysis = analyzeHealth(samples, windowStart, this.config, {
+            activeIssues: this.getActiveIssues(),
+            eventsAfter,
+        });
+        const { report, nextIssues } = this.computeChanges(analysis.results, analysis.events);
+        const latestSampleAt = samples.length > 0 ? samples[samples.length - 1].timestamp : null;
+
+        if (report) {
+            this.logger.warn(
+                {
+                    degraded: report.degraded.map((r) => ({
+                        check: r.check,
+                        severity: r.severity,
+                    })),
+                    improved: report.improved.map((r) => ({
+                        check: r.check,
+                        severity: r.severity,
+                    })),
+                    recovered: report.recovered.map((r) => r.check),
+                    events: report.events.map((e) => e.kind),
+                },
+                'Health changed'
+            );
+
+            if (
+                this.notificationService.isEnabled() &&
+                !(await this.notificationService.sendHealthAlert(report))
+            ) {
+                this.logger.warn('Health alert not delivered, it will be retried on the next run');
+                return report;
+            }
+        } else {
             this.logger.debug(
-                { evaluatedChecks: analysis.results.length, activeIssues: this.activeIssues.size },
+                { evaluatedChecks: analysis.results.length, activeIssues: nextIssues.size },
                 'Health unchanged'
             );
-            return null;
         }
 
-        this.logger.warn(
-            {
-                degraded: report.degraded.map((r) => ({ check: r.check, severity: r.severity })),
-                recovered: report.recovered.map((r) => r.check),
-                events: report.events.map((e) => e.kind),
-            },
-            'Health changed'
-        );
-
-        if (this.notificationService.isEnabled()) {
-            await this.notificationService.sendHealthAlert(report);
+        this.activeIssues = nextIssues;
+        if (latestSampleAt && latestSampleAt > (this.lastProcessedSampleAt ?? new Date(0))) {
+            this.lastProcessedSampleAt = latestSampleAt;
         }
 
         return report;
     }
 
-    /**
-     * Compare the analysis with the already notified issues and events, and update the state
-     */
-    private diff(results: HealthCheckResult[], events: HealthEvent[]): HealthReport | null {
-        const degraded: HealthCheckResult[] = [];
-        const recovered: HealthCheckResult[] = [];
+    private getActiveIssues(): Partial<Record<HealthCheckId, ActiveIssue>> {
+        const issues: Partial<Record<HealthCheckId, ActiveIssue>> = {};
+        for (const [check, result] of this.activeIssues) {
+            if (result.severity !== null) {
+                issues[check] = { severity: result.severity, reference: result.reference };
+            }
+        }
+        return issues;
+    }
 
+    /**
+     * Compare the analysis with the already notified issues, without changing the state
+     */
+    private computeChanges(
+        results: HealthCheckResult[],
+        events: HealthEvent[]
+    ): { report: HealthReport | null; nextIssues: Map<HealthCheckId, HealthCheckResult> } {
+        const report: HealthReport = { degraded: [], improved: [], recovered: [], events };
         // Checks without enough data are not in results: their previous state is kept
+        const nextIssues = new Map(this.activeIssues);
+
         for (const result of results) {
             const previous = this.activeIssues.get(result.check);
 
-            if (result.severity !== null) {
-                if (previous?.severity !== result.severity) {
-                    degraded.push(result);
+            if (result.severity === null) {
+                if (previous) {
+                    report.recovered.push(result);
+                    nextIssues.delete(result.check);
                 }
-                this.activeIssues.set(result.check, result);
-            } else if (previous) {
-                recovered.push(result);
-                this.activeIssues.delete(result.check);
+                continue;
             }
+
+            const previousRank = previous?.severity ? SEVERITY_RANK[previous.severity] : 0;
+            if (SEVERITY_RANK[result.severity] > previousRank) {
+                report.degraded.push(result);
+            } else if (SEVERITY_RANK[result.severity] < previousRank) {
+                report.improved.push(result);
+            }
+            nextIssues.set(result.check, result);
         }
 
-        const lastNotifiedAt = this.lastEventSampleAt?.getTime() ?? -Infinity;
-        const newEvents = events
-            .filter((event) => event.sampleAt.getTime() > lastNotifiedAt)
-            .sort((a, b) => a.sampleAt.getTime() - b.sampleAt.getTime());
-        if (newEvents.length > 0) {
-            this.lastEventSampleAt = newEvents[newEvents.length - 1].sampleAt;
-        }
+        const changed =
+            report.degraded.length > 0 ||
+            report.improved.length > 0 ||
+            report.recovered.length > 0 ||
+            report.events.length > 0;
 
-        if (degraded.length === 0 && recovered.length === 0 && newEvents.length === 0) {
-            return null;
-        }
-
-        return { degraded, recovered, events: newEvents };
+        return { report: changed ? report : null, nextIssues };
     }
 }

@@ -171,7 +171,7 @@ describe('analyzeHealth', () => {
 
             assert.strictEqual(result?.severity, 'critical');
             assert.strictEqual(result?.current, '-27.5 dBm');
-            assert.match(result?.reason ?? '', /critical threshold of -27\.0 dBm/);
+            assert.match(result?.reason ?? '', /critical threshold: -27\.0 dBm/);
         });
 
         it('should raise a warning below the warning RX threshold', () => {
@@ -188,7 +188,7 @@ describe('analyzeHealth', () => {
             const result = resultFor(buildSamples({}, { sfp_pwr_rx_dbm: -20.5 }), 'fiber_rx');
 
             assert.strictEqual(result?.severity, 'warning');
-            assert.match(result?.reason ?? '', /2\.5 dB below 24h baseline \(-18\.0 dBm\)/);
+            assert.match(result?.reason ?? '', /2\.5 dB below baseline \(-18\.0 dBm\)/);
         });
 
         it('should ignore isolated spikes thanks to the median', () => {
@@ -215,7 +215,7 @@ describe('analyzeHealth', () => {
 
         assert.strictEqual(result?.severity, 'warning');
         assert.strictEqual(result?.current, '4.00 Gbit/s');
-        assert.match(result?.reason ?? '', /50% below 24h baseline \(8\.00 Gbit\/s\)/);
+        assert.match(result?.reason ?? '', /50% below baseline \(8\.00 Gbit\/s\)/);
     });
 
     it('should raise a warning when the connection media changes', () => {
@@ -234,7 +234,7 @@ describe('analyzeHealth', () => {
             );
             assert.strictEqual(warning?.severity, 'warning');
             assert.strictEqual(warning?.current, '92.0% used (80.0 GB free)');
-            assert.match(warning?.reason ?? '', /warning threshold of 90%/);
+            assert.match(warning?.reason ?? '', /warning threshold: 90%/);
 
             const critical = resultFor(
                 buildSamples({}, { disk_used_bytes: 990_000_000_000 }),
@@ -271,7 +271,7 @@ describe('analyzeHealth', () => {
             const critical = resultFor(buildSamples({}, { disk_temp: 60 }), 'disk_temp');
             assert.strictEqual(critical?.severity, 'critical');
             assert.strictEqual(critical?.current, '60°C');
-            assert.match(critical?.reason ?? '', /critical threshold of 60°C/);
+            assert.match(critical?.reason ?? '', /critical threshold: 60°C/);
         });
 
         it('should check the CPU and switch temperatures', () => {
@@ -520,6 +520,7 @@ describe('HealthMonitor', () => {
         notificationService.isEnabled = () => true;
         notificationService.sendHealthAlert = async (report: HealthReport) => {
             sentReports.push(report);
+            return true;
         };
     });
 
@@ -671,13 +672,15 @@ describe('NotificationService.sendHealthAlert', () => {
         const service = createService(messages);
 
         await service.sendHealthAlert({
+            improved: [],
             degraded: [
                 {
                     check: 'fiber_rx',
                     label: 'Fiber RX power',
                     current: '-27.5 dBm',
                     severity: 'critical',
-                    reason: 'below critical threshold of -27.0 dBm',
+                    reason: 'critical threshold: -27.0 dBm',
+                    reference: null,
                 },
                 {
                     check: 'media',
@@ -685,6 +688,7 @@ describe('NotificationService.sendHealthAlert', () => {
                     current: 'backup_4g',
                     severity: 'warning',
                     reason: 'usual media over the last 24h is ftth',
+                    reference: null,
                 },
             ],
             recovered: [
@@ -694,6 +698,7 @@ describe('NotificationService.sendHealthAlert', () => {
                     current: '50.0% used (500.0 GB free)',
                     severity: null,
                     reason: null,
+                    reference: null,
                 },
             ],
             events: [
@@ -725,6 +730,7 @@ describe('NotificationService.sendHealthAlert', () => {
 
         await service.sendHealthAlert({
             degraded: [],
+            improved: [],
             recovered: [
                 {
                     check: 'fiber_rx',
@@ -732,6 +738,7 @@ describe('NotificationService.sendHealthAlert', () => {
                     current: '-18.0 dBm',
                     severity: null,
                     reason: null,
+                    reference: null,
                 },
             ],
             events: [],
@@ -746,6 +753,7 @@ describe('NotificationService.sendHealthAlert', () => {
 
         await service.sendHealthAlert({
             degraded: [],
+            improved: [],
             recovered: [],
             events: [
                 {
@@ -760,12 +768,360 @@ describe('NotificationService.sendHealthAlert', () => {
         assert.match(messages[0], /🌐 Public IPv4 changed/);
     });
 
+    it('should use an improving title for severity improvements only', async () => {
+        const messages: string[] = [];
+        const service = createService(messages);
+
+        const delivered = await service.sendHealthAlert({
+            degraded: [],
+            improved: [
+                {
+                    check: 'disk_temp',
+                    label: 'Disk temperature',
+                    current: '56°C',
+                    severity: 'warning',
+                    reason: 'warning threshold: 55°C',
+                    reference: null,
+                },
+            ],
+            recovered: [],
+            events: [],
+        });
+
+        assert.strictEqual(delivered, true);
+        assert.match(messages[0], /Freebox Health Improving/);
+        assert.match(messages[0], /🟠 \*Disk temperature\*: 56°C \(improved\)/);
+    });
+
+    it('should report a failed delivery', async () => {
+        const service = createService([]);
+        (service as any).bot = {
+            sendMessage: async () => {
+                throw new Error('ETELEGRAM: 429 Too Many Requests');
+            },
+        };
+
+        const delivered = await service.sendHealthAlert({
+            degraded: [],
+            improved: [],
+            recovered: [],
+            events: [{ kind: 'reboot', sampleAt: new Date(), message: 'Freebox rebooted' }],
+        });
+
+        assert.strictEqual(delivered, false);
+    });
+
     it('should send nothing for an empty report', async () => {
         const messages: string[] = [];
         const service = createService(messages);
 
-        await service.sendHealthAlert({ degraded: [], recovered: [], events: [] });
+        await service.sendHealthAlert({ degraded: [], improved: [], recovered: [], events: [] });
 
         assert.strictEqual(messages.length, 0);
+    });
+});
+
+/**
+ * Build one sample per minute ending just before NOW, from consecutive segments of
+ * [duration in minutes, overrides]; the last 15 minutes make up the analysis window
+ */
+function timeline(
+    segments: Array<[number, Partial<HealthSample>]>,
+    end: Date = NOW
+): HealthSample[] {
+    const total = segments.reduce((minutes, [duration]) => minutes + duration, 0);
+    let time = end.getTime() - total * 60000;
+    const samples: HealthSample[] = [];
+    for (const [duration, overrides] of segments) {
+        for (let i = 0; i < duration; i++) {
+            samples.push({ ...HEALTHY, ...overrides, timestamp: new Date(time) });
+            time += 60000;
+        }
+    }
+    return samples;
+}
+
+describe('HealthMonitor review regressions', () => {
+    let fastify: FastifyInstance;
+    let notificationService: NotificationService;
+    let sentReports: HealthReport[];
+    let deliveries: boolean[];
+
+    const config: HealthMonitorConfig = { ...CONFIG, enabled: true, checkIntervalMs: WINDOW_MS };
+
+    /**
+     * Monitor whose heartbeat source honors the queried time range, like the database does
+     */
+    function createMonitor(source: { samples: HealthSample[]; fail?: boolean }): HealthMonitor {
+        const heartbeatService = new HeartbeatService();
+        heartbeatService.getHealthSamples = async (start: Date, end: Date) => {
+            if (source.fail) {
+                throw new Error('Database unavailable');
+            }
+            return source.samples.filter((s) => s.timestamp >= start && s.timestamp <= end);
+        };
+        return new HealthMonitor(fastify.log, notificationService, heartbeatService, config);
+    }
+
+    before(async () => {
+        fastify = Fastify({ logger: false });
+        await fastify.ready();
+    });
+
+    beforeEach(() => {
+        sentReports = [];
+        deliveries = [];
+        notificationService = new NotificationService(fastify.log);
+        notificationService.isEnabled = () => true;
+        notificationService.sendHealthAlert = async (report: HealthReport) => {
+            const delivered = deliveries.length > 0 ? deliveries.shift()! : true;
+            if (delivered) {
+                sentReports.push(report);
+            }
+            return delivered;
+        };
+    });
+
+    after(async () => {
+        await fastify.close();
+    });
+
+    describe('degradations lasting longer than half the baseline', () => {
+        for (const [check, degraded] of [
+            ['line_rate_down', { bandwidth_down: 1_000_000_000 }],
+            ['fiber_rx', { sfp_pwr_rx_dbm: -21 }],
+            ['fiber_tx', { sfp_pwr_tx_dbm: 0 }],
+            ['media', { media_state: 'backup_4g' }],
+        ] as const) {
+            it(`should keep ${check} degraded, then recover when it is back to normal`, async () => {
+                const source = {
+                    samples: timeline([
+                        [600, {}],
+                        [15, degraded],
+                    ]),
+                };
+                const monitor = createMonitor(source);
+
+                const first = await monitor.check(NOW);
+                assert.deepStrictEqual(
+                    first?.degraded.map((r) => r.check),
+                    [check]
+                );
+
+                // Degraded for 14 hours: the degraded values make up most of the baseline
+                source.samples = timeline([
+                    [600, {}],
+                    [840, degraded],
+                ]);
+                assert.strictEqual(await monitor.check(NOW), null);
+
+                source.samples = timeline([
+                    [600, {}],
+                    [825, degraded],
+                    [15, {}],
+                ]);
+                const recovery = await monitor.check(NOW);
+                assert.deepStrictEqual(recovery?.degraded, []);
+                assert.deepStrictEqual(
+                    recovery?.recovered.map((r) => r.check),
+                    [check]
+                );
+            });
+        }
+    });
+
+    describe('fan', () => {
+        it('should recover as soon as a fan stopped for a long time spins again', async () => {
+            const source = {
+                samples: timeline([
+                    [600, {}],
+                    [15, { fan_rpm: 0 }],
+                ]),
+            };
+            const monitor = createMonitor(source);
+
+            assert.deepStrictEqual(
+                (await monitor.check(NOW))?.degraded.map((r) => [r.check, r.severity]),
+                [['fan', 'critical']]
+            );
+
+            source.samples = timeline([
+                [600, {}],
+                [840, { fan_rpm: 0 }],
+                [15, {}],
+            ]);
+            assert.deepStrictEqual(
+                (await monitor.check(NOW))?.recovered.map((r) => r.check),
+                ['fan']
+            );
+        });
+
+        it('should report a fan stopped for longer than half the baseline after a restart', () => {
+            const result = analyze(
+                timeline([
+                    [600, {}],
+                    [840, { fan_rpm: 0 }],
+                ])
+            ).results.find((r) => r.check === 'fan');
+
+            assert.strictEqual(result?.severity, 'critical');
+            assert.match(result?.reason ?? '', /usually 1800 rpm/);
+        });
+    });
+
+    describe('events between two runs', () => {
+        it('should notify an event that happened right after the previous run', async () => {
+            const end = new Date(NOW.getTime() + 20 * 60000);
+            const samples = timeline([[120, {}]], NOW);
+            samples.push({
+                ...HEALTHY,
+                ipv4: '82.67.1.1',
+                timestamp: new Date(NOW.getTime() + 5000),
+            });
+            for (let minute = 1; minute <= 20; minute++) {
+                samples.push({
+                    ...HEALTHY,
+                    ipv4: '82.67.1.1',
+                    timestamp: new Date(NOW.getTime() + 5000 + minute * 60000),
+                });
+            }
+            const monitor = createMonitor({ samples: samples.filter((s) => s.timestamp <= end) });
+
+            assert.strictEqual(await monitor.check(NOW), null);
+            const report = await monitor.check(new Date(NOW.getTime() + WINDOW_MS + 10000));
+
+            assert.deepStrictEqual(
+                report?.events.map((e) => e.kind),
+                ['public_ipv4']
+            );
+        });
+
+        it('should catch up on the events of a failed run', async () => {
+            const source = { samples: timeline([[120, {}]]), fail: false };
+            const monitor = createMonitor(source);
+            await monitor.check(NOW);
+
+            // Reboot during the next interval, whose check fails
+            const later = new Date(NOW.getTime() + WINDOW_MS);
+            const reboot = new Date(NOW.getTime() + 2 * 60000);
+            source.samples = [
+                ...source.samples,
+                ...timeline([[30, {}]], new Date(later.getTime() + WINDOW_MS)).map((s) =>
+                    s.timestamp >= reboot
+                        ? { ...s, uptime: (s.timestamp.getTime() - reboot.getTime()) / 1000 + 60 }
+                        : s
+                ),
+            ];
+            source.fail = true;
+            await assert.rejects(monitor.check(later));
+
+            source.fail = false;
+            const report = await monitor.check(new Date(later.getTime() + WINDOW_MS));
+            assert.deepStrictEqual(
+                report?.events.map((e) => e.kind),
+                ['reboot']
+            );
+        });
+
+        it('should not count disk errors twice when runs overlap', async () => {
+            const samples = timeline([[60, {}]]);
+            samples[samples.length - 2].disk_read_errors = 2;
+            samples[samples.length - 1].disk_read_errors = 2;
+            const source = { samples };
+            const monitor = createMonitor(source);
+
+            assert.match(
+                (await monitor.check(NOW))?.events[0].message ?? '',
+                /\+2 read \(total 2\)/
+            );
+
+            const later = new Date(NOW.getTime() + 5 * 60000);
+            source.samples = [
+                ...samples,
+                { ...HEALTHY, disk_read_errors: 3, timestamp: new Date(NOW.getTime() + 60000) },
+            ];
+            const report = await monitor.check(later);
+            assert.deepStrictEqual(
+                report?.events.map((e) => e.message),
+                ['Disk errors increased: +1 read (total 3)']
+            );
+        });
+    });
+
+    describe('notification delivery', () => {
+        it('should retry a degradation and its events when the delivery failed', async () => {
+            const samples = timeline([
+                [60, {}],
+                [15, { temp_cpu: 101 }],
+            ]);
+            samples[samples.length - 1].ipv4 = '82.67.1.1';
+            const monitor = createMonitor({ samples });
+
+            deliveries = [false];
+            await monitor.check(NOW);
+            assert.strictEqual(sentReports.length, 0);
+
+            const retry = await monitor.check(NOW);
+            assert.deepStrictEqual(
+                retry?.degraded.map((r) => [r.check, r.severity]),
+                [['cpu_temp', 'critical']]
+            );
+            assert.deepStrictEqual(
+                retry?.events.map((e) => e.kind),
+                ['public_ipv4']
+            );
+            assert.strictEqual(sentReports.length, 1);
+        });
+    });
+
+    describe('severity changes', () => {
+        it('should report a severity improvement apart from degradations', async () => {
+            const source = {
+                samples: timeline([
+                    [60, {}],
+                    [15, { disk_temp: 61 }],
+                ]),
+            };
+            const monitor = createMonitor(source);
+            await monitor.check(NOW);
+
+            source.samples = timeline([
+                [60, {}],
+                [15, { disk_temp: 56 }],
+            ]);
+            const report = await monitor.check(NOW);
+
+            assert.deepStrictEqual(report?.degraded, []);
+            assert.deepStrictEqual(
+                report?.improved.map((r) => [r.check, r.severity]),
+                [['disk_temp', 'warning']]
+            );
+        });
+
+        it('should not flap when a value hovers around a threshold', async () => {
+            const source = {
+                samples: timeline([
+                    [60, {}],
+                    [15, { disk_temp: 55 }],
+                ]),
+            };
+            const monitor = createMonitor(source);
+            assert.strictEqual((await monitor.check(NOW))?.degraded.length, 1);
+
+            source.samples = timeline([
+                [60, {}],
+                [15, { disk_temp: 54 }],
+            ]);
+            assert.strictEqual(await monitor.check(NOW), null);
+
+            source.samples = timeline([
+                [60, {}],
+                [15, { disk_temp: 52 }],
+            ]);
+            assert.deepStrictEqual(
+                (await monitor.check(NOW))?.recovered.map((r) => r.check),
+                ['disk_temp']
+            );
+        });
     });
 });

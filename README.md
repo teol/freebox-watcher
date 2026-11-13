@@ -749,7 +749,7 @@ The service sends the following notifications:
 - **⚠️ Downtime Confirmed**: Sent after the downtime has lasted for the configured confirmation delay (default: 30 minutes)
 - **✅ Service Recovered**: Sent when a heartbeat is received after a downtime event
 - **🆕 New Device Detected**: Sent when an unknown device joins the LAN (see `NEW_DEVICE_NOTIFICATION_ENABLED`)
-- **🚨 Freebox Health Degraded** / **✅ Freebox Health Restored** / **🔔 Freebox Events**: Sent by the health monitor (see below)
+- **🚨 Freebox Health Degraded** / **📈 Freebox Health Improving** / **✅ Freebox Health Restored** / **🔔 Freebox Events**: Sent by the health monitor (see below)
 
 ### Health Monitoring
 
@@ -757,7 +757,7 @@ Every `HEALTH_CHECK_INTERVAL` (default: 15 minutes), the service analyzes the he
 
 Every alert is **enabled by default** and can be disabled individually by setting its switch to `false`. `HEALTH_MONITOR_ENABLED=false` disables them all.
 
-**Checks** are notified when they become degraded, when their severity changes, and when they go back to normal:
+**Checks** are notified when they become degraded, when their severity worsens or improves, and when they go back to normal:
 
 | Alert              | Switch                       | Heartbeat field         | Warning 🟠 (default)                            | Critical 🔴 (default)          | Threshold variables                                                                   |
 | ------------------ | ---------------------------- | ----------------------- | ----------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------- |
@@ -779,9 +779,17 @@ Every alert is **enabled by default** and can be disabled individually by settin
 | Public IP change | `HEALTH_PUBLIC_IP_ENABLED`   | `ipv4`, `ipv6`                          | The public IPv4 or IPv6 address changes (both addresses are included in the message) |
 | Disk errors      | `HEALTH_DISK_ERRORS_ENABLED` | `disk_read_errors`, `disk_write_errors` | A disk error counter increases                                                       |
 
-The temperature thresholds are conservative defaults: check the usual values of your Freebox in the `heartbeats` table and adjust them if needed.
+The temperature thresholds are conservative defaults: check the usual values of your Freebox in the `heartbeats` table and adjust them if needed. The fan alert assumes the fan always spins: if yours legitimately stops when the box is cool, set `HEALTH_FAN_ENABLED=false`.
 
-To avoid alert storms, every check run sends at most one aggregated message, and only for changes. A check is skipped while there is not enough data (at least 3 samples in the window, and 12 in the baseline for the checks relying on it), for instance during a downtime, and its previous state is kept. The state is kept in memory: an ongoing degradation is notified again after a restart.
+To avoid alert storms, every check run sends at most one aggregated message, and only for changes:
+
+- While a relative check is degraded, its reference (baseline value, usual media, usual fan speed) stays pinned to the value it had when the degradation started, so that a long degradation never becomes the new normal.
+- A degraded check only recovers, or improves, once its value goes back past its threshold by a small margin (0.5 dB, 2°C, 1% of disk space, 2% of line rate), so that a value hovering around a threshold does not flap.
+- Events are detected on every heartbeat received since the last processed one, so that none is missed between two runs or by a failed run.
+- The alert state is only updated once Telegram confirms the delivery: a failed notification is sent again on the next run.
+- A check is skipped while there is not enough data (at least 3 samples in the window, and 12 in the baseline for the checks relying on it), for instance during a downtime, and its previous state is kept.
+
+The state is kept in memory: an ongoing degradation is notified again after a restart.
 
 ### Disabling Notifications
 
