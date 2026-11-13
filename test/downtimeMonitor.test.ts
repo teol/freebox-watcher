@@ -9,11 +9,17 @@ import { NotificationService } from '../src/services/notification.js';
 describe('DowntimeMonitor', () => {
     let fastify: FastifyInstance;
     let notificationService: NotificationService;
+    const originalGetActiveDowntimeEvent = downtimeService.getActiveDowntimeEvent;
+    const originalGetLastHeartbeat = heartbeatService.getLastHeartbeat;
 
     before(async () => {
         fastify = Fastify({ logger: false });
         await fastify.ready();
         notificationService = new NotificationService(fastify.log);
+
+        // Started monitors run a check right away: keep them away from the database
+        downtimeService.getActiveDowntimeEvent = async () => null;
+        heartbeatService.getLastHeartbeat = async () => null;
     });
 
     beforeEach(() => {
@@ -23,6 +29,8 @@ describe('DowntimeMonitor', () => {
     });
 
     after(async () => {
+        downtimeService.getActiveDowntimeEvent = originalGetActiveDowntimeEvent;
+        heartbeatService.getLastHeartbeat = originalGetLastHeartbeat;
         await fastify.close();
     });
 
