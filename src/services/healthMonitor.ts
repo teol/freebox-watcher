@@ -8,6 +8,7 @@ import {
     type HealthCheckId,
     type HealthCheckResult,
     type HealthEvent,
+    type HealthReference,
     type HealthSeverity,
     type TemperatureConfig,
 } from './healthChecks.js';
@@ -161,8 +162,14 @@ export class HealthMonitor {
     private timeoutId: NodeJS.Timeout | null = null;
     // Degraded checks already notified; kept in memory, so an ongoing degradation is notified again after a restart
     private activeIssues = new Map<HealthCheckId, HealthCheckResult>();
-    // Timestamp of the latest heartbeat whose events were processed, the next run resumes after it
-    private lastProcessedSampleAt: Date | null = null;
+    // Events are detected on heartbeats strictly newer than this cursor. It is set before the
+    // first query and only moves forward once a run succeeds, so failed runs are caught up.
+    private eventsCursor: Date | null = null;
+    // References of recently recovered checks, kept until the baseline no longer holds the degradation
+    private retainedReferences = new Map<
+        HealthCheckId,
+        { reference: HealthReference; until: Date }
+    >();
     private readonly logger: FastifyBaseLogger;
     private readonly notificationService: NotificationService;
     private readonly heartbeatService: HeartbeatService;
@@ -250,19 +257,26 @@ export class HealthMonitor {
             windowStart.getTime() - this.config.baselineHours * 3600 * 1000
         );
 
-        // Events resume after the last processed heartbeat, so that none falls between two runs
-        // or is lost by a failed run; older ones than the fetched range cannot be analyzed
-        const eventsAfter =
-            this.lastProcessedSampleAt === null
-                ? new Date(windowStart.getTime() - 1)
-                : new Date(Math.max(this.lastProcessedSampleAt.getTime(), baselineStart.getTime()));
+        if (this.eventsCursor === null) {
+            this.eventsCursor = new Date(windowStart.getTime() - 1);
+        }
+        // Events older than the fetched range cannot be analyzed
+        const eventsAfter = new Date(
+            Math.max(this.eventsCursor.getTime(), baselineStart.getTime())
+        );
 
         const samples = await this.heartbeatService.getHealthSamples(baselineStart, now);
+        const retainedReferences = this.getRetainedReferences(now);
         const analysis = analyzeHealth(samples, windowStart, this.config, {
             activeIssues: this.getActiveIssues(),
+            retainedReferences,
             eventsAfter,
         });
-        const { report, nextIssues } = this.computeChanges(analysis.results, analysis.events);
+        const { report, nextIssues, nextRetained } = this.computeChanges(
+            analysis.results,
+            analysis.events,
+            now
+        );
         const latestSampleAt = samples.length > 0 ? samples[samples.length - 1].timestamp : null;
 
         if (report) {
@@ -297,8 +311,9 @@ export class HealthMonitor {
         }
 
         this.activeIssues = nextIssues;
-        if (latestSampleAt && latestSampleAt > (this.lastProcessedSampleAt ?? new Date(0))) {
-            this.lastProcessedSampleAt = latestSampleAt;
+        this.retainedReferences = nextRetained;
+        if (latestSampleAt && latestSampleAt > this.eventsCursor) {
+            this.eventsCursor = latestSampleAt;
         }
 
         return report;
@@ -314,16 +329,34 @@ export class HealthMonitor {
         return issues;
     }
 
+    private getRetainedReferences(now: Date): Partial<Record<HealthCheckId, HealthReference>> {
+        const references: Partial<Record<HealthCheckId, HealthReference>> = {};
+        for (const [check, { reference, until }] of this.retainedReferences) {
+            if (until > now) {
+                references[check] = reference;
+            }
+        }
+        return references;
+    }
+
     /**
      * Compare the analysis with the already notified issues, without changing the state
      */
     private computeChanges(
         results: HealthCheckResult[],
-        events: HealthEvent[]
-    ): { report: HealthReport | null; nextIssues: Map<HealthCheckId, HealthCheckResult> } {
+        events: HealthEvent[],
+        now: Date
+    ): {
+        report: HealthReport | null;
+        nextIssues: Map<HealthCheckId, HealthCheckResult>;
+        nextRetained: Map<HealthCheckId, { reference: HealthReference; until: Date }>;
+    } {
         const report: HealthReport = { degraded: [], improved: [], recovered: [], events };
         // Checks without enough data are not in results: their previous state is kept
         const nextIssues = new Map(this.activeIssues);
+        const nextRetained = new Map(
+            [...this.retainedReferences].filter(([, { until }]) => until > now)
+        );
 
         for (const result of results) {
             const previous = this.activeIssues.get(result.check);
@@ -332,9 +365,20 @@ export class HealthMonitor {
                 if (previous) {
                     report.recovered.push(result);
                     nextIssues.delete(result.check);
+                    if (previous.reference !== null) {
+                        nextRetained.set(result.check, {
+                            reference: previous.reference,
+                            until: new Date(
+                                now.getTime() + this.config.baselineHours * 3600 * 1000
+                            ),
+                        });
+                    }
                 }
                 continue;
             }
+
+            // An active issue pins its own reference
+            nextRetained.delete(result.check);
 
             const previousRank = previous?.severity ? SEVERITY_RANK[previous.severity] : 0;
             if (SEVERITY_RANK[result.severity] > previousRank) {
@@ -351,6 +395,6 @@ export class HealthMonitor {
             report.recovered.length > 0 ||
             report.events.length > 0;
 
-        return { report: changed ? report : null, nextIssues };
+        return { report: changed ? report : null, nextIssues, nextRetained };
     }
 }

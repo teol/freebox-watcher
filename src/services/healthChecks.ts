@@ -147,6 +147,11 @@ export interface HealthAnalysisOptions {
      * not become the new normal, and they only recover past a small margin (hysteresis).
      */
     activeIssues?: Partial<Record<HealthCheckId, ActiveIssue>>;
+    /**
+     * References of checks that recently recovered, kept while the baseline still holds the
+     * degraded period, so that the degraded values do not become the reference right away
+     */
+    retainedReferences?: Partial<Record<HealthCheckId, HealthReference>>;
     /** Events are detected on samples strictly newer than this date (default: the window start) */
     eventsAfter?: Date | null;
 }
@@ -273,23 +278,45 @@ function windowMedian(samples: HealthSample[], column: NumericColumn): number | 
     return values.length >= MIN_WINDOW_SAMPLES ? median(values) : null;
 }
 
-function pinnedNumber(issue: ActiveIssue | undefined): number | null {
-    return typeof issue?.reference === 'number' ? issue.reference : null;
+/**
+ * Reference pinned by an active issue, or retained after a recent recovery
+ */
+interface PinnedState {
+    active: ActiveIssue | undefined;
+    retained: HealthReference | undefined;
+}
+
+function pinnedReference({ active, retained }: PinnedState): HealthReference | null {
+    return active?.reference ?? retained ?? null;
+}
+
+function pinnedNumber(state: PinnedState): number | null {
+    const reference = pinnedReference(state);
+    return typeof reference === 'number' ? reference : null;
+}
+
+/**
+ * Recovery margin of a relative check, kept below its threshold so that a value back at its
+ * reference (zero drop) always recovers
+ */
+function relativeMargin(margin: number, threshold: number): number {
+    return Math.min(margin, threshold / 2);
 }
 
 function checkFiberRx(
     window: HealthSample[],
     baseline: HealthSample[],
     config: HealthChecksConfig,
-    active: ActiveIssue | undefined
+    pinned: PinnedState
 ): HealthCheckResult | null {
+    const { active } = pinned;
     const current = windowMedian(window, 'sfp_pwr_rx_dbm');
     if (current === null) {
         return null;
     }
 
     const { rxWarningDbm, rxCriticalDbm, dropDb } = config.fiber;
-    const reference = pinnedNumber(active) ?? baselineMedian(baseline, 'sfp_pwr_rx_dbm');
+    const reference = pinnedNumber(pinned) ?? baselineMedian(baseline, 'sfp_pwr_rx_dbm');
     // Lower is worse for optical power: the opposite values are compared
     const absolute = severityFor(
         -current,
@@ -301,7 +328,13 @@ function checkFiberRx(
     const drop =
         reference === null
             ? null
-            : severityFor(reference - current, dropDb, Infinity, HYSTERESIS.dbm, active?.severity);
+            : severityFor(
+                  reference - current,
+                  dropDb,
+                  Infinity,
+                  relativeMargin(HYSTERESIS.dbm, dropDb),
+                  active?.severity
+              );
 
     let reason: string | null = null;
     if (absolute !== null) {
@@ -325,10 +358,10 @@ function checkFiberTx(
     window: HealthSample[],
     baseline: HealthSample[],
     config: HealthChecksConfig,
-    active: ActiveIssue | undefined
+    pinned: PinnedState
 ): HealthCheckResult | null {
     const current = windowMedian(window, 'sfp_pwr_tx_dbm');
-    const reference = pinnedNumber(active) ?? baselineMedian(baseline, 'sfp_pwr_tx_dbm');
+    const reference = pinnedNumber(pinned) ?? baselineMedian(baseline, 'sfp_pwr_tx_dbm');
 
     // TX power has no universal absolute threshold, only a drop relative to the baseline is checked
     if (current === null || reference === null) {
@@ -339,8 +372,8 @@ function checkFiberTx(
         reference - current,
         config.fiber.dropDb,
         Infinity,
-        HYSTERESIS.dbm,
-        active?.severity
+        relativeMargin(HYSTERESIS.dbm, config.fiber.dropDb),
+        pinned.active?.severity
     );
 
     return {
@@ -360,11 +393,11 @@ function checkLineRate(
     baseline: HealthSample[],
     config: HealthChecksConfig,
     direction: 'down' | 'up',
-    active: ActiveIssue | undefined
+    pinned: PinnedState
 ): HealthCheckResult | null {
     const column = direction === 'down' ? 'bandwidth_down' : 'bandwidth_up';
     const current = windowMedian(window, column);
-    const reference = pinnedNumber(active) ?? baselineMedian(baseline, column);
+    const reference = pinnedNumber(pinned) ?? baselineMedian(baseline, column);
 
     if (current === null || reference === null || reference <= 0) {
         return null;
@@ -375,8 +408,8 @@ function checkLineRate(
         dropPercent,
         config.lineRate.dropPercent,
         Infinity,
-        HYSTERESIS.lineRatePercent,
-        active?.severity
+        relativeMargin(HYSTERESIS.lineRatePercent, config.lineRate.dropPercent),
+        pinned.active?.severity
     );
 
     return {
@@ -418,14 +451,15 @@ function checkMedia(
     window: HealthSample[],
     baseline: HealthSample[],
     config: HealthChecksConfig,
-    active: ActiveIssue | undefined
+    pinnedState: PinnedState
 ): HealthCheckResult | null {
     let current: string | null = null;
     for (let i = window.length - 1; i >= 0 && current === null; i--) {
         current = window[i].media_state || null;
     }
 
-    const pinned = typeof active?.reference === 'string' ? active.reference : null;
+    const reference = pinnedReference(pinnedState);
+    const pinned = typeof reference === 'string' ? reference : null;
     const usual = pinned ?? usualMedia(baseline);
     if (current === null || usual === null) {
         return null;
@@ -516,7 +550,7 @@ function checkDiskSpace(
 function checkFan(
     window: HealthSample[],
     baseline: HealthSample[],
-    active: ActiveIssue | undefined
+    pinned: PinnedState
 ): HealthCheckResult | null {
     const current = windowMedian(window, 'fan_rpm');
 
@@ -524,7 +558,7 @@ function checkFan(
     // not make the fan look absent. Boxes without enough such samples are not checked.
     const spinning = numericValues(baseline, 'fan_rpm').filter((rpm) => rpm > 0);
     const usual =
-        pinnedNumber(active) ?? (spinning.length >= MIN_BASELINE_SAMPLES ? median(spinning) : null);
+        pinnedNumber(pinned) ?? (spinning.length >= MIN_BASELINE_SAMPLES ? median(spinning) : null);
 
     if (current === null || usual === null) {
         return null;
@@ -678,6 +712,11 @@ export function analyzeHealth(
     const baseline = samples.filter((s) => s.timestamp.getTime() < windowStart.getTime());
     const window = samples.filter((s) => s.timestamp.getTime() >= windowStart.getTime());
     const active = options.activeIssues ?? {};
+    const retained = options.retainedReferences ?? {};
+    const pinned = (check: HealthCheckId): PinnedState => ({
+        active: active[check],
+        retained: retained[check],
+    });
     const eventsAfter = options.eventsAfter ?? new Date(windowStart.getTime() - 1);
 
     const results: (HealthCheckResult | null)[] = [];
@@ -685,18 +724,18 @@ export function analyzeHealth(
 
     if (config.fiber.enabled) {
         results.push(
-            checkFiberRx(window, baseline, config, active.fiber_rx),
-            checkFiberTx(window, baseline, config, active.fiber_tx)
+            checkFiberRx(window, baseline, config, pinned('fiber_rx')),
+            checkFiberTx(window, baseline, config, pinned('fiber_tx'))
         );
     }
     if (config.lineRate.enabled) {
         results.push(
-            checkLineRate(window, baseline, config, 'down', active.line_rate_down),
-            checkLineRate(window, baseline, config, 'up', active.line_rate_up)
+            checkLineRate(window, baseline, config, 'down', pinned('line_rate_down')),
+            checkLineRate(window, baseline, config, 'up', pinned('line_rate_up'))
         );
     }
     if (config.media.enabled) {
-        results.push(checkMedia(window, baseline, config, active.media));
+        results.push(checkMedia(window, baseline, config, pinned('media')));
     }
     if (config.diskSpace.enabled) {
         results.push(checkDiskSpace(window, config, active.disk_space));
@@ -738,7 +777,7 @@ export function analyzeHealth(
         );
     }
     if (config.fan.enabled) {
-        results.push(checkFan(window, baseline, active.fan));
+        results.push(checkFan(window, baseline, pinned('fan')));
     }
 
     if (config.reboot.enabled) {

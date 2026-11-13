@@ -852,7 +852,10 @@ describe('HealthMonitor review regressions', () => {
     /**
      * Monitor whose heartbeat source honors the queried time range, like the database does
      */
-    function createMonitor(source: { samples: HealthSample[]; fail?: boolean }): HealthMonitor {
+    function createMonitor(
+        source: { samples: HealthSample[]; fail?: boolean },
+        monitorConfig: HealthMonitorConfig = config
+    ): HealthMonitor {
         const heartbeatService = new HeartbeatService();
         heartbeatService.getHealthSamples = async (start: Date, end: Date) => {
             if (source.fail) {
@@ -860,8 +863,20 @@ describe('HealthMonitor review regressions', () => {
             }
             return source.samples.filter((s) => s.timestamp >= start && s.timestamp <= end);
         };
-        return new HealthMonitor(fastify.log, notificationService, heartbeatService, config);
+        return new HealthMonitor(fastify.log, notificationService, heartbeatService, monitorConfig);
     }
+
+    /**
+     * Heartbeats until `end`, with the public IPv4 changing one minute before NOW
+     */
+    function ipChangeTimeline(end: Date, overrides: Partial<HealthSample> = {}): HealthSample[] {
+        const minutes = 120 + Math.round((end.getTime() - NOW.getTime()) / 60000);
+        return timeline([[minutes, overrides]], end).map((s) =>
+            s.timestamp.getTime() >= NOW.getTime() - 60000 ? { ...s, ipv4: '82.67.1.1' } : s
+        );
+    }
+
+    const NEXT_RUN = new Date(NOW.getTime() + WINDOW_MS + 10000);
 
     before(async () => {
         fastify = Fastify({ logger: false });
@@ -1049,19 +1064,16 @@ describe('HealthMonitor review regressions', () => {
     });
 
     describe('notification delivery', () => {
-        it('should retry a degradation and its events when the delivery failed', async () => {
-            const samples = timeline([
-                [60, {}],
-                [15, { temp_cpu: 101 }],
-            ]);
-            samples[samples.length - 1].ipv4 = '82.67.1.1';
-            const monitor = createMonitor({ samples });
+        it('should retry a degradation and its events on the next scheduled run', async () => {
+            const monitor = createMonitor({
+                samples: ipChangeTimeline(NEXT_RUN, { temp_cpu: 101 }),
+            });
 
             deliveries = [false];
             await monitor.check(NOW);
             assert.strictEqual(sentReports.length, 0);
 
-            const retry = await monitor.check(NOW);
+            const retry = await monitor.check(NEXT_RUN);
             assert.deepStrictEqual(
                 retry?.degraded.map((r) => [r.check, r.severity]),
                 [['cpu_temp', 'critical']]
@@ -1072,6 +1084,126 @@ describe('HealthMonitor review regressions', () => {
             );
             assert.strictEqual(sentReports.length, 1);
         });
+
+        it('should retry the events of a very first run whose delivery failed', async () => {
+            const monitor = createMonitor({ samples: ipChangeTimeline(NEXT_RUN) });
+
+            deliveries = [false];
+            await monitor.check(NOW);
+
+            assert.deepStrictEqual(
+                (await monitor.check(NEXT_RUN))?.events.map((e) => e.kind),
+                ['public_ipv4']
+            );
+        });
+
+        it('should catch up on the events of a very first run whose query failed', async () => {
+            const source = { samples: ipChangeTimeline(NEXT_RUN), fail: true };
+            const monitor = createMonitor(source);
+
+            await assert.rejects(monitor.check(NOW));
+            source.fail = false;
+
+            assert.deepStrictEqual(
+                (await monitor.check(NEXT_RUN))?.events.map((e) => e.kind),
+                ['public_ipv4']
+            );
+        });
+    });
+
+    describe('after a recovery', () => {
+        it('should keep the usual media while the baseline still holds the backup period', async () => {
+            const backup = { media_state: 'backup_4g' };
+            const source = {
+                samples: timeline([
+                    [600, {}],
+                    [15, backup],
+                ]),
+            };
+            const monitor = createMonitor(source);
+            await monitor.check(NOW);
+
+            source.samples = timeline([
+                [600, {}],
+                [825, backup],
+                [15, {}],
+            ]);
+            assert.deepStrictEqual(
+                (await monitor.check(NOW))?.recovered.map((r) => r.check),
+                ['media']
+            );
+
+            // Next runs: the baseline still mostly holds the backup media, then only FTTH
+            source.samples = timeline([
+                [600, {}],
+                [810, backup],
+                [30, {}],
+            ]);
+            assert.strictEqual(await monitor.check(NOW), null);
+            source.samples = timeline([[1440, {}]]);
+            assert.strictEqual(await monitor.check(NOW), null);
+
+            // A new backup period is still compared to FTTH
+            source.samples = timeline([
+                [1425, {}],
+                [15, backup],
+            ]);
+            const report = await monitor.check(NOW);
+            assert.match(report?.degraded[0]?.reason ?? '', /is ftth$/);
+        });
+
+        it('should release the retained reference once the baseline period has passed', async () => {
+            const source = {
+                samples: timeline([
+                    [600, {}],
+                    [15, { media_state: 'xdsl' }],
+                ]),
+            };
+            const monitor = createMonitor(source);
+            await monitor.check(NOW);
+            source.samples = timeline([
+                [600, {}],
+                [825, { media_state: 'xdsl' }],
+                [15, {}],
+            ]);
+            await monitor.check(NOW);
+
+            // The usual media really changed: once the baseline period has passed, it is accepted
+            const later = new Date(NOW.getTime() + 25 * 3600 * 1000);
+            source.samples = timeline([[1440, { media_state: 'xdsl' }]], later);
+            assert.strictEqual(await monitor.check(later), null);
+        });
+    });
+
+    describe('small drop thresholds', () => {
+        for (const [name, overrides, degraded] of [
+            [
+                'line rate at 2%',
+                { lineRate: { enabled: true, dropPercent: 2 } },
+                { bandwidth_down: 4_000_000_000 },
+            ],
+            [
+                'line rate at 1%',
+                { lineRate: { enabled: true, dropPercent: 1 } },
+                { bandwidth_down: 4_000_000_000 },
+            ],
+            ['fiber at 0.5 dB', { fiber: { ...CONFIG.fiber, dropDb: 0.5 } }, { sfp_pwr_tx_dbm: 1 }],
+            ['fiber at 0.3 dB', { fiber: { ...CONFIG.fiber, dropDb: 0.3 } }, { sfp_pwr_tx_dbm: 1 }],
+        ] as const) {
+            it(`should recover with a ${name} threshold once back to the baseline`, async () => {
+                const source = {
+                    samples: timeline([
+                        [60, {}],
+                        [15, degraded],
+                    ]),
+                };
+                const monitor = createMonitor(source, { ...config, ...overrides });
+                assert.strictEqual((await monitor.check(NOW))?.degraded.length, 1);
+
+                source.samples = timeline([[75, {}]]);
+                assert.strictEqual((await monitor.check(NOW))?.recovered.length, 1);
+            });
+        }
     });
 
     describe('severity changes', () => {

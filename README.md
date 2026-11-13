@@ -783,9 +783,9 @@ The temperature thresholds are conservative defaults: check the usual values of 
 
 To avoid alert storms, every check run sends at most one aggregated message, and only for changes:
 
-- While a relative check is degraded, its reference (baseline value, usual media, usual fan speed) stays pinned to the value it had when the degradation started, so that a long degradation never becomes the new normal.
-- A degraded check only recovers, or improves, once its value goes back past its threshold by a small margin (0.5 dB, 2°C, 1% of disk space, 2% of line rate), so that a value hovering around a threshold does not flap.
-- Events are detected on every heartbeat received since the last processed one, so that none is missed between two runs or by a failed run.
+- While a relative check is degraded, its reference (baseline value, usual media, usual fan speed) stays pinned to the value it had when the degradation started, so that a long degradation never becomes the new normal. After the recovery, that reference is kept for one more baseline period, until the baseline no longer holds the degraded values.
+- A degraded check only recovers, or improves, once its value goes back past its threshold by a small margin (0.5 dB, 2°C, 1% of disk space, 2% of line rate, capped at half the configured drop thresholds), so that a value hovering around a threshold does not flap.
+- Events are detected on every heartbeat received since the last processed one, so that none is missed between two runs or by a failed run, including the very first one.
 - The alert state is only updated once Telegram confirms the delivery: a failed notification is sent again on the next run.
 - A check is skipped while there is not enough data (at least 3 samples in the window, and 12 in the baseline for the checks relying on it), for instance during a downtime, and its previous state is kept.
 
