@@ -114,13 +114,14 @@ export const heartbeatRoutes: FastifyPluginAsync = async (fastify): Promise<void
 
                 fastify.log.info({ downtimeId: activeDowntime.id }, 'Downtime event ended');
 
-                // Send recovery notification
+                // Fire-and-forget: Telegram retries and rate-limit waits must not delay
+                // the heartbeat response
                 if (fastify.notificationService.isEnabled()) {
-                    await fastify.notificationService.sendRecoveryAlert(
-                        activeDowntime.id,
-                        activeDowntime.started_at,
-                        endedAt
-                    );
+                    void fastify.notificationService
+                        .sendRecoveryAlert(activeDowntime.id, activeDowntime.started_at, endedAt)
+                        .catch((err: unknown) =>
+                            fastify.log.error({ err }, 'Failed to send recovery notification')
+                        );
                 }
             }
 

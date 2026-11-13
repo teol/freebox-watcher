@@ -134,6 +134,39 @@ describe('API (database)', () => {
         assert.ok((event.duration ?? 0) >= 600);
     });
 
+    // Timeout: awaiting the never-settling alert would otherwise hang the test instead of failing it
+    it('should not wait for the recovery notification before answering the heartbeat', {
+        timeout: 5_000,
+    }, async () => {
+        const downtimeId = await downtimeService.createDowntimeEvent(
+            new Date(Date.now() - 600_000)
+        );
+        const notificationService = fastify.notificationService;
+        const originalIsEnabled = notificationService.isEnabled;
+        const originalSendRecoveryAlert = notificationService.sendRecoveryAlert;
+        const recoveryAlerts: number[] = [];
+        notificationService.isEnabled = () => true;
+        // Simulates an unresponsive Telegram API: the alert never settles
+        notificationService.sendRecoveryAlert = (id: number) => {
+            recoveryAlerts.push(id);
+            return new Promise<void>(() => {});
+        };
+
+        try {
+            const response = await postHeartbeat({
+                connection_state: 'up',
+                timestamp: new Date().toISOString(),
+            });
+
+            assert.strictEqual(response.statusCode, 200, response.body);
+            assert.deepStrictEqual(recoveryAlerts, [downtimeId]);
+            assert.strictEqual(await downtimeService.getActiveDowntimeEvent(), null);
+        } finally {
+            notificationService.isEnabled = originalIsEnabled;
+            notificationService.sendRecoveryAlert = originalSendRecoveryAlert;
+        }
+    });
+
     it('should keep the downtime active when a non "up" heartbeat is received', async () => {
         await downtimeService.createDowntimeEvent(new Date(Date.now() - 600_000));
 

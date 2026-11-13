@@ -9,14 +9,16 @@ const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_DAY = 86400;
 
 /**
- * Telegram calls are awaited in the heartbeat route (recovery alert), so every wait must be bounded.
- * Worst case: 3 attempts of 10 s plus 2 retry waits of at most 5 s, i.e. about 40 s, instead of
- * about 17 min with the library defaults (5 min per attempt, up to 60 s per rate-limit wait).
+ * The library default timeout (5 min per attempt) is far too long for short messages.
+ * Rate-limit waits keep the library default cap (60 s): callers do not retry failed alerts,
+ * so a flood-wait should delay an alert rather than drop it. Telegram calls must therefore
+ * stay out of request handlers (fire-and-forget).
+ * Worst case: 3 attempts of 10 s plus 2 rate-limit waits of at most 60 s, i.e. about 2.5 min.
  */
 export const TELEGRAM_TRANSPORT_OPTIONS: Readonly<TransportOptions> = {
     timeoutMs: 10_000,
     maxRetries: 2,
-    maxRetryAfterMs: 5_000,
+    maxRetryAfterMs: 60_000,
 };
 
 /**
