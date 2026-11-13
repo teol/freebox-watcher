@@ -1,4 +1,4 @@
-import { Api } from 'node-telegram-bot-api';
+import { Api, type TransportOptions } from 'node-telegram-bot-api';
 import type { FastifyBaseLogger } from 'fastify';
 import type { ActiveDevice } from './heartbeat.js';
 import type { HealthReport } from './healthMonitor.js';
@@ -7,6 +7,17 @@ import type { HealthCheckResult, HealthEventKind } from './healthChecks.js';
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_DAY = 86400;
+
+/**
+ * Telegram calls are awaited in the heartbeat route (recovery alert), so every wait must be bounded.
+ * Worst case: 3 attempts of 10 s plus 2 retry waits of at most 5 s, i.e. about 40 s, instead of
+ * about 17 min with the library defaults (5 min per attempt, up to 60 s per rate-limit wait).
+ */
+export const TELEGRAM_TRANSPORT_OPTIONS: Readonly<TransportOptions> = {
+    timeoutMs: 10_000,
+    maxRetries: 2,
+    maxRetryAfterMs: 5_000,
+};
 
 /**
  * Escape the characters interpreted by Telegram legacy Markdown
@@ -35,9 +46,14 @@ export class NotificationService {
     private chatId: string | null = null;
     private enabled = false;
     private logger: FastifyBaseLogger;
+    private readonly transportOptions: Readonly<TransportOptions>;
 
-    constructor(logger: FastifyBaseLogger) {
+    constructor(
+        logger: FastifyBaseLogger,
+        transportOptions: Readonly<TransportOptions> = TELEGRAM_TRANSPORT_OPTIONS
+    ) {
         this.logger = logger.child({ service: 'NotificationService' });
+        this.transportOptions = transportOptions;
         this.initialize();
     }
 
@@ -56,7 +72,7 @@ export class NotificationService {
         }
 
         try {
-            this.bot = new Api(botToken);
+            this.bot = new Api(botToken, { ...this.transportOptions });
             this.chatId = chatId;
             this.enabled = true;
             this.logger.info('Telegram notifications enabled');
