@@ -50,7 +50,15 @@ describe('HealthMonitor (database)', () => {
     let monitor: HealthMonitor;
     let reports: HealthReport[];
 
+    // Variables loaded from a local .env must not change the default configuration under test
+    const localHealthEnv = Object.entries(process.env).filter(([name]) =>
+        name.startsWith('HEALTH_')
+    );
+
     before(async () => {
+        for (const [name] of localHealthEnv) {
+            delete process.env[name];
+        }
         await setupDatabase();
         fastify = Fastify({ logger: false });
         await fastify.ready();
@@ -63,6 +71,7 @@ describe('HealthMonitor (database)', () => {
         notificationService.isEnabled = () => true;
         notificationService.sendHealthAlert = async (report) => {
             reports.push(report);
+            return true;
         };
         // Default configuration: every alert enabled with the default thresholds
         monitor = new HealthMonitor(fastify.log, notificationService, new HeartbeatService(), {
@@ -72,8 +81,12 @@ describe('HealthMonitor (database)', () => {
     });
 
     after(async () => {
-        await fastify.close();
-        await teardownDatabase();
+        try {
+            await fastify?.close();
+        } finally {
+            await teardownDatabase();
+            Object.assign(process.env, Object.fromEntries(localHealthEnv));
+        }
     });
 
     it('should notify nothing for a healthy Freebox', async () => {

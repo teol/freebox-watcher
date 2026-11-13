@@ -41,9 +41,12 @@ describe('API (database)', () => {
     beforeEach(resetDatabase);
 
     after(async () => {
-        await fastify?.close();
-        await teardownDatabase();
-        process.env = originalEnv;
+        try {
+            await fastify?.close();
+        } finally {
+            await teardownDatabase();
+            process.env = originalEnv;
+        }
     });
 
     async function postHeartbeat(payload: Record<string, unknown>) {
