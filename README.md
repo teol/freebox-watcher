@@ -13,7 +13,7 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 - 🛡️ Rate limiting (5 requests per minute)
 - 📊 MariaDB storage for heartbeat history
 - 🔔 Automatic downtime detection (5 minutes without heartbeat)
-- 📉 Connection quality alerts (fiber signal, line rate, 4G backup, reboots)
+- 🩺 Freebox health alerts (fiber signal, line rate, 4G backup, disk, temperatures, fan, reboots, public IP changes), each one configurable
 - 📲 Telegram notifications for downtime alerts and recovery
 - 🔎 Optional read-only GraphQL API to query heartbeats and downtimes (disabled by default)
 - 📝 Structured logging with Pino
@@ -148,14 +148,11 @@ DOWNTIME_CONFIRMATION_DELAY=1800000
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_CHAT_ID=your-telegram-chat-id
 
-# Connection quality monitoring (optional, enabled by default)
-QUALITY_MONITOR_ENABLED=true
-QUALITY_CHECK_INTERVAL=900000
-QUALITY_BASELINE_HOURS=24
-QUALITY_SFP_RX_WARNING_DBM=-25
-QUALITY_SFP_RX_CRITICAL_DBM=-27
-QUALITY_SFP_DROP_DB=2
-QUALITY_BANDWIDTH_DROP_PERCENT=20
+# Freebox health monitoring (optional, every alert enabled by default)
+# See "Health Monitoring" for every alert switch and threshold
+HEALTH_MONITOR_ENABLED=true
+HEALTH_CHECK_INTERVAL=900000
+HEALTH_BASELINE_HOURS=24
 
 # GraphQL API (optional, disabled by default)
 GRAPHQL_ENABLED=false
@@ -179,13 +176,10 @@ GRAPHQL_RATE_LIMIT=60
 - `DOWNTIME_CONFIRMATION_DELAY`: Time in milliseconds before sending a confirmation alert (default: 1800000 = 30 minutes)
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token for sending notifications (optional)
 - `TELEGRAM_CHAT_ID`: Telegram chat ID to receive notifications (optional)
-- `QUALITY_MONITOR_ENABLED`: Set to `false` to disable the connection quality monitor (default: enabled)
-- `QUALITY_CHECK_INTERVAL`: Interval in milliseconds between two connection quality checks, also the length of the analysis window (default: 900000 = 15 minutes, minimum: 60000)
-- `QUALITY_BASELINE_HOURS`: Length in hours of the baseline period the analysis window is compared to (default: 24)
-- `QUALITY_SFP_RX_WARNING_DBM`: Fiber RX power below which a warning is sent (default: -25)
-- `QUALITY_SFP_RX_CRITICAL_DBM`: Fiber RX power below which a critical alert is sent (default: -27)
-- `QUALITY_SFP_DROP_DB`: Fiber RX/TX power drop in dB compared to the baseline that raises a warning (default: 2)
-- `QUALITY_BANDWIDTH_DROP_PERCENT`: Line rate drop in percent compared to the baseline that raises a warning (default: 20)
+- `HEALTH_MONITOR_ENABLED`: Set to `false` to disable the whole health monitor (default: enabled)
+- `HEALTH_CHECK_INTERVAL`: Interval in milliseconds between two health checks, also the length of the analysis window (default: 900000 = 15 minutes, minimum: 60000)
+- `HEALTH_BASELINE_HOURS`: Length in hours of the baseline period the analysis window is compared to (default: 24)
+- `HEALTH_*`: Switch and thresholds of each health alert, see [Health Monitoring](#health-monitoring)
 - `GRAPHQL_ENABLED`: Set to `true` to expose the read-only GraphQL API (default: disabled)
 - `GRAPHQL_API_TOKEN_HASH`: SHA-256 hash of the GraphQL Bearer token, required when the API is enabled (see [GraphQL API](#graphql-api))
 - `GRAPHQL_RATE_LIMIT`: Maximum GraphQL requests per minute per IP address (default: 60)
@@ -755,21 +749,39 @@ The service sends the following notifications:
 - **⚠️ Downtime Confirmed**: Sent after the downtime has lasted for the configured confirmation delay (default: 30 minutes)
 - **✅ Service Recovered**: Sent when a heartbeat is received after a downtime event
 - **🆕 New Device Detected**: Sent when an unknown device joins the LAN (see `NEW_DEVICE_NOTIFICATION_ENABLED`)
-- **📉 Connection Quality Degraded** / **📈 Connection Quality Restored** / **🔄 Freebox Rebooted**: Sent by the connection quality monitor (see below)
+- **🚨 Freebox Health Degraded** / **✅ Freebox Health Restored** / **🔔 Freebox Events**: Sent by the health monitor (see below)
 
-### Connection Quality Monitoring
+### Health Monitoring
 
-Every `QUALITY_CHECK_INTERVAL` (default: 15 minutes), the service computes the **median** of the heartbeats received during the last interval (the analysis window) and compares it to the median of the preceding `QUALITY_BASELINE_HOURS` (default: 24 hours). Using medians makes the checks robust to isolated spikes.
+Every `HEALTH_CHECK_INTERVAL` (default: 15 minutes), the service analyzes the heartbeats received during the last interval (the analysis window). Most checks use the **median** of the window, which makes them robust to isolated spikes, and some compare it to the median of the preceding `HEALTH_BASELINE_HOURS` (default: 24 hours).
 
-| Check            | Heartbeat field        | Warning 🟠                                      | Critical 🔴   |
-| ---------------- | ---------------------- | ----------------------------------------------- | ------------- |
-| Fiber RX power   | `sfp_pwr_rx_dbm`       | Below -25 dBm, or 2 dB below the baseline       | Below -27 dBm |
-| Fiber TX power   | `sfp_pwr_tx_dbm`       | 2 dB below the baseline                         | -             |
-| Line rate        | `bandwidth_down`/`_up` | 20% below the baseline                          | -             |
-| Connection media | `media_state`          | Different from the usual media (e.g. 4G backup) | -             |
-| Reboot           | `uptime`               | Uptime counter reset between two heartbeats     | -             |
+Every alert is **enabled by default** and can be disabled individually by setting its switch to `false`. `HEALTH_MONITOR_ENABLED=false` disables them all.
 
-To avoid alert storms, only **changes** are notified, in a single aggregated message per check: a new degradation, a severity change, or a return to normal. A check is skipped while there is not enough data (at least 3 samples in the window and 12 in the baseline), for instance during a downtime, and its previous state is kept. The state is kept in memory: an ongoing degradation is notified again after a restart.
+**Checks** are notified when they become degraded, when their severity changes, and when they go back to normal:
+
+| Alert              | Switch                       | Heartbeat field         | Warning 🟠 (default)                            | Critical 🔴 (default)          | Threshold variables                                                                   |
+| ------------------ | ---------------------------- | ----------------------- | ----------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------- |
+| Fiber RX power     | `HEALTH_FIBER_ENABLED`       | `sfp_pwr_rx_dbm`        | Below -25 dBm, or 2 dB below the baseline       | Below -27 dBm                  | `HEALTH_FIBER_RX_WARNING_DBM`, `HEALTH_FIBER_RX_CRITICAL_DBM`, `HEALTH_FIBER_DROP_DB` |
+| Fiber TX power     | `HEALTH_FIBER_ENABLED`       | `sfp_pwr_tx_dbm`        | 2 dB below the baseline                         | -                              | `HEALTH_FIBER_DROP_DB`                                                                |
+| Line rate          | `HEALTH_LINE_RATE_ENABLED`   | `bandwidth_down`/`_up`  | 20% below the baseline                          | -                              | `HEALTH_LINE_RATE_DROP_PERCENT`                                                       |
+| Connection media   | `HEALTH_MEDIA_ENABLED`       | `media_state`           | Different from the usual media (e.g. 4G backup) | -                              | -                                                                                     |
+| Disk space         | `HEALTH_DISK_SPACE_ENABLED`  | `disk_used/total_bytes` | 90% used                                        | 95% used                       | `HEALTH_DISK_SPACE_WARNING_PERCENT`, `HEALTH_DISK_SPACE_CRITICAL_PERCENT`             |
+| Disk temperature   | `HEALTH_DISK_TEMP_ENABLED`   | `disk_temp`             | 55°C                                            | 60°C                           | `HEALTH_DISK_TEMP_WARNING`, `HEALTH_DISK_TEMP_CRITICAL`                               |
+| CPU temperature    | `HEALTH_CPU_TEMP_ENABLED`    | `temp_cpu`              | 90°C                                            | 100°C                          | `HEALTH_CPU_TEMP_WARNING`, `HEALTH_CPU_TEMP_CRITICAL`                                 |
+| Switch temperature | `HEALTH_SWITCH_TEMP_ENABLED` | `temp_switch`           | 80°C                                            | 90°C                           | `HEALTH_SWITCH_TEMP_WARNING`, `HEALTH_SWITCH_TEMP_CRITICAL`                           |
+| Fan                | `HEALTH_FAN_ENABLED`         | `fan_rpm`               | -                                               | Stopped while it usually spins | -                                                                                     |
+
+**Events** are notified once, when they happen:
+
+| Event            | Switch                       | Heartbeat field                         | Notified when                                                                        |
+| ---------------- | ---------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ |
+| Reboot           | `HEALTH_REBOOT_ENABLED`      | `uptime`                                | The uptime counter resets between two heartbeats                                     |
+| Public IP change | `HEALTH_PUBLIC_IP_ENABLED`   | `ipv4`, `ipv6`                          | The public IPv4 or IPv6 address changes (both addresses are included in the message) |
+| Disk errors      | `HEALTH_DISK_ERRORS_ENABLED` | `disk_read_errors`, `disk_write_errors` | A disk error counter increases                                                       |
+
+The temperature thresholds are conservative defaults: check the usual values of your Freebox in the `heartbeats` table and adjust them if needed.
+
+To avoid alert storms, every check run sends at most one aggregated message, and only for changes. A check is skipped while there is not enough data (at least 3 samples in the window, and 12 in the baseline for the checks relying on it), for instance during a downtime, and its previous state is kept. The state is kept in memory: an ongoing degradation is notified again after a restart.
 
 ### Disabling Notifications
 

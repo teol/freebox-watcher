@@ -4,9 +4,10 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { HeartbeatService } from '../../src/services/heartbeat.js';
 import { NotificationService } from '../../src/services/notification.js';
 import {
-    ConnectionQualityMonitor,
-    type QualityReport,
-} from '../../src/services/connectionQualityMonitor.js';
+    HealthMonitor,
+    loadHealthMonitorConfig,
+    type HealthReport,
+} from '../../src/services/healthMonitor.js';
 import type { HeartbeatsInsert } from '../../src/types/database.js';
 import { setupDatabase, resetDatabase, teardownDatabase, insertHeartbeats } from './setup.js';
 
@@ -23,22 +24,31 @@ function heartbeats(recent: Partial<HeartbeatsInsert>): HeartbeatsInsert[] {
         rows.push({
             status: 'up',
             timestamp,
+            ipv4: '82.67.197.112',
             media_state: 'ftth',
             bandwidth_down: 8_000_000_000,
             bandwidth_up: 700_000_000,
             sfp_pwr_rx_dbm: -18,
             sfp_pwr_tx_dbm: 3,
+            temp_cpu: 65,
+            temp_switch: 55,
+            fan_rpm: 1800,
             uptime: 100_000 + (120 - minute) * 60,
+            disk_temp: 40,
+            disk_used_bytes: 500_000_000_000,
+            disk_total_bytes: 1_000_000_000_000,
+            disk_read_errors: 0,
+            disk_write_errors: 0,
             ...(minute <= 15 ? recent : {}),
         });
     }
     return rows;
 }
 
-describe('ConnectionQualityMonitor (database)', () => {
+describe('HealthMonitor (database)', () => {
     let fastify: FastifyInstance;
-    let monitor: ConnectionQualityMonitor;
-    let reports: QualityReport[];
+    let monitor: HealthMonitor;
+    let reports: HealthReport[];
 
     before(async () => {
         await setupDatabase();
@@ -51,23 +61,14 @@ describe('ConnectionQualityMonitor (database)', () => {
         reports = [];
         const notificationService = new NotificationService(fastify.log);
         notificationService.isEnabled = () => true;
-        notificationService.sendConnectionQualityAlert = async (report) => {
+        notificationService.sendHealthAlert = async (report) => {
             reports.push(report);
         };
-        monitor = new ConnectionQualityMonitor(
-            fastify.log,
-            notificationService,
-            new HeartbeatService(),
-            {
-                enabled: true,
-                checkIntervalMs: INTERVAL_MS,
-                baselineHours: 24,
-                sfpRxWarningDbm: -25,
-                sfpRxCriticalDbm: -27,
-                sfpDropDb: 2,
-                bandwidthDropPercent: 20,
-            }
-        );
+        // Default configuration: every alert enabled with the default thresholds
+        monitor = new HealthMonitor(fastify.log, notificationService, new HeartbeatService(), {
+            ...loadHealthMonitorConfig(),
+            checkIntervalMs: INTERVAL_MS,
+        });
     });
 
     after(async () => {
@@ -75,23 +76,39 @@ describe('ConnectionQualityMonitor (database)', () => {
         await teardownDatabase();
     });
 
-    it('should notify nothing for a healthy connection', async () => {
+    it('should notify nothing for a healthy Freebox', async () => {
         await insertHeartbeats(heartbeats({}));
 
         assert.strictEqual(await monitor.check(NOW), null);
         assert.strictEqual(reports.length, 0);
     });
 
-    it('should detect a fiber signal degradation and a switch to the 4G backup', async () => {
-        await insertHeartbeats(heartbeats({ sfp_pwr_rx_dbm: -27.5, media_state: 'backup_4g' }));
+    it('should detect degradations and events from the stored heartbeats', async () => {
+        await insertHeartbeats(
+            heartbeats({
+                sfp_pwr_rx_dbm: -27.5,
+                media_state: 'backup_4g',
+                disk_used_bytes: 960_000_000_000,
+                ipv4: '82.67.1.1',
+                disk_write_errors: 2,
+            })
+        );
 
         const report = await monitor.check(NOW);
 
         assert.deepStrictEqual(
             report?.degraded.map((r) => [r.check, r.severity]),
             [
-                ['sfp_rx', 'critical'],
-                ['media_state', 'warning'],
+                ['fiber_rx', 'critical'],
+                ['media', 'warning'],
+                ['disk_space', 'critical'],
+            ]
+        );
+        assert.deepStrictEqual(
+            report?.events.map((e) => e.message),
+            [
+                'Public IPv4 changed from 82.67.197.112 to 82.67.1.1',
+                'Disk errors increased: +2 write (total 2)',
             ]
         );
         assert.strictEqual(reports.length, 1);

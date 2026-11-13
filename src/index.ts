@@ -30,8 +30,8 @@ async function start(): Promise<void> {
         // Start downtime monitoring
         fastify.downtimeMonitor.start();
 
-        // Start connection quality monitoring
-        fastify.connectionQualityMonitor.start();
+        // Start Freebox health monitoring
+        fastify.healthMonitor.start();
 
         // Start daily chart service
         fastify.dailyChartService.start();

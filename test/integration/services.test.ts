@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { db } from '../../src/db/config.js';
 import { HeartbeatService, type HeartbeatInput } from '../../src/services/heartbeat.js';
 import { DowntimeService } from '../../src/services/downtime.js';
+import { HEALTH_SAMPLE_COLUMNS } from '../../src/services/healthChecks.js';
 import type { DevicesTable } from '../../src/types/database.js';
 import { setupDatabase, resetDatabase, teardownDatabase, insertHeartbeats } from './setup.js';
 
@@ -160,14 +161,14 @@ describe('HeartbeatService (database)', () => {
         assert.strictEqual(await service.getHeartbeatById(999_999), null);
     });
 
-    it('should return the quality samples of a range ordered by timestamp', async () => {
+    it('should return the health samples of a range ordered by timestamp', async () => {
         await insertHeartbeats([
             { status: 'up', timestamp: new Date('2026-11-13T10:02:00.000Z'), sfp_pwr_rx_dbm: -20 },
             { status: 'up', timestamp: new Date('2026-11-13T10:00:00.000Z'), sfp_pwr_rx_dbm: -18 },
             { status: 'up', timestamp: new Date('2026-11-13T09:00:00.000Z'), sfp_pwr_rx_dbm: -10 },
         ]);
 
-        const samples = await service.getQualitySamples(
+        const samples = await service.getHealthSamples(
             new Date('2026-11-13T09:30:00.000Z'),
             new Date('2026-11-13T11:00:00.000Z')
         );
@@ -176,15 +177,7 @@ describe('HeartbeatService (database)', () => {
             samples.map((s) => s.sfp_pwr_rx_dbm),
             [-18, -20]
         );
-        assert.deepStrictEqual(Object.keys(samples[0]).sort(), [
-            'bandwidth_down',
-            'bandwidth_up',
-            'media_state',
-            'sfp_pwr_rx_dbm',
-            'sfp_pwr_tx_dbm',
-            'timestamp',
-            'uptime',
-        ]);
+        assert.deepStrictEqual(Object.keys(samples[0]).sort(), [...HEALTH_SAMPLE_COLUMNS].sort());
     });
 
     it('should delete heartbeats older than the retention period', async () => {
