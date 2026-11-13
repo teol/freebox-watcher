@@ -1,11 +1,11 @@
-import os from 'os';
+import os from 'node:os';
 import cron, { type ScheduledTask } from 'node-cron';
 import * as cronParser from 'cron-parser';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
-import fs from 'fs/promises';
-import path from 'path';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { logger } from '../utils/logger.js';
-import { HeartbeatService, type HeartbeatRecord } from './heartbeat.js';
+import type { HeartbeatService, HeartbeatRecord } from './heartbeat.js';
 
 const DEFAULT_CRON_SCHEDULE = '0 5 * * *'; // Daily at 5:00 AM
 const DISCORD_WEBHOOK_TIMEOUT_MS = 30_000;

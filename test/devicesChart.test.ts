@@ -1,11 +1,11 @@
-import { describe, it, before, after, afterEach } from 'node:test';
+import { describe, it, before, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { BaseChartService } from '../src/services/baseChart.js';
 import { DevicesChartService } from '../src/services/devicesChart.js';
 import { HeartbeatService } from '../src/services/heartbeat.js';
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 /** Minimal HeartbeatRecord shape needed by the devices chart */
 interface MockHeartbeat {
@@ -263,10 +263,8 @@ describe('DevicesChartService', () => {
 
         const originalFetch = global.fetch;
         let fetchCalled = false;
-        let fetchBody: FormData | undefined;
-        global.fetch = async (_url, init) => {
+        global.fetch = async () => {
             fetchCalled = true;
-            fetchBody = init?.body as FormData;
             return {
                 ok: true,
                 status: 200,

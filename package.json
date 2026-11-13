@@ -12,19 +12,22 @@
         "clean": "rm -rf dist",
         "build": "tsc -p tsconfig.json",
         "start": "node --enable-source-maps dist/src/index.js",
-        "dev": "ts-node --esm src/index.ts",
-        "watch": "ts-node --esm --watch src/index.ts",
+        "dev": "tsx src/index.ts",
+        "watch": "tsx watch src/index.ts",
         "test": "yarn build && DB_HOST=unit-tests.invalid node --test dist/test/*.test.js",
         "test:coverage": "yarn build && DB_HOST=unit-tests.invalid node --test --experimental-test-coverage dist/test/*.test.js",
         "test:integration": "yarn build && node --test --test-concurrency=1 dist/test/integration/*.test.js",
-        "notify:test": "ts-node --esm src/scripts/sendTestNotification.ts",
+        "notify:test": "tsx src/scripts/sendTestNotification.ts",
         "graphql:token": "yarn build && node dist/src/scripts/generateGraphqlToken.js",
-        "db:migrate": "knex migrate:latest",
-        "db:rollback": "knex migrate:rollback",
-        "db:status": "knex migrate:status",
-        "db:make": "knex migrate:make",
-        "format": "prettier --write .",
-        "format:check": "prettier --check ."
+        "knex": "node --import tsx node_modules/knex/bin/cli.js",
+        "db:migrate": "yarn knex migrate:latest",
+        "db:rollback": "yarn knex migrate:rollback",
+        "db:status": "yarn knex migrate:status",
+        "db:make": "yarn knex migrate:make",
+        "format": "biome format --write",
+        "format:check": "biome format",
+        "lint": "biome lint",
+        "check": "biome check"
     },
     "keywords": [
         "freebox",
@@ -40,7 +43,6 @@
         "chart.js": "^4.6.1",
         "chartjs-node-canvas": "^5.0.0",
         "cron-parser": "^5.10.4",
-        "dotenv": "^18.0.10",
         "fastify": "^5.12.8",
         "graphql": "^17.1.0",
         "knex": "^3.3.0",
@@ -52,9 +54,9 @@
         "rotating-file-stream": "^3.2.10"
     },
     "devDependencies": {
+        "@biomejs/biome": "2.6.7",
         "@types/node": "^26.6.6",
-        "prettier": "^3.9.6",
-        "ts-node": "^10.9.2",
+        "tsx": "^4.23.15",
         "typescript": "^6.0.3"
     }
 }

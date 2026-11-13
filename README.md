@@ -27,7 +27,8 @@ Freebox Watcher is a Node.js-based monitoring solution that receives HTTP heartb
 - **Database**: MariaDB
 - **Query Builder**: Knex.js with mysql2 driver
 - **Logging**: Pino
-- **Configuration**: dotenv
+- **Configuration**: `.env` file loaded with Node's native `process.loadEnvFile()`
+- **Formatting & Linting**: Biome
 - **Reverse Proxy**: Caddy/Nginx (for production deployment)
 
 ## Prerequisites
@@ -84,7 +85,7 @@ yarn start
 
 ## Useful Scripts
 
-- `yarn dev` - Run the API directly with ts-node
+- `yarn dev` - Run the API directly from the TypeScript sources with tsx (no type checking, use `yarn build` for that)
 - `yarn watch` - Run the API in watch mode with automatic reloads
 - `yarn build` - Compile the TypeScript sources to `dist`
 - `yarn test` - Execute the unit test suite with Node's test runner (no database required)
@@ -94,7 +95,9 @@ yarn start
 - `yarn db:rollback` - Roll back the last batch of migrations
 - `yarn db:status` - Check migration status
 - `yarn db:make <name>` - Create a new migration file
-- `yarn format` - Format the codebase with Prettier
+- `yarn format` - Format the codebase with Biome
+- `yarn lint` - Lint the codebase with Biome
+- `yarn check` - Check formatting and lint rules in one pass
 - `yarn graphql:token` - Generate a GraphQL API token and its hash
 
 ### Integration Tests
@@ -240,9 +243,9 @@ Copy the generated secret and set it as `API_SECRET` in your `.env` file on the 
 5. **Client** builds canonical message: `method=METHOD;path=PATH;ts=TIMESTAMP;nonce=NONCE;body_sha256=HASH`
 6. **Client** computes HMAC-SHA256 signature of the canonical message
 7. **Client** sends request with 3 headers:
-    - `Authorization: Bearer <hmac_signature>`
-    - `Signature-Timestamp: <unix_timestamp>`
-    - `Signature-Nonce: <random_string>`
+   - `Authorization: Bearer <hmac_signature>`
+   - `Signature-Timestamp: <unix_timestamp>`
+   - `Signature-Nonce: <random_string>`
 8. **Server** reconstructs the canonical message and verifies the signature
 9. **Server** checks timestamp is not expired (max 60 seconds old)
 
@@ -650,16 +653,16 @@ An optional, **read-only** GraphQL API exposes heartbeats and downtime events. I
 
 1. Generate a token and its hash:
 
-    ```bash
-    yarn graphql:token
-    ```
+   ```bash
+   yarn graphql:token
+   ```
 
 2. Give the token (`fbw_...`) to your client and add the hash to the server's `.env`:
 
-    ```env
-    GRAPHQL_ENABLED=true
-    GRAPHQL_API_TOKEN_HASH=<hash printed by the command>
-    ```
+   ```env
+   GRAPHQL_ENABLED=true
+   GRAPHQL_API_TOKEN_HASH=<hash printed by the command>
+   ```
 
 3. Restart the service. The endpoint is available at `POST /api/graphql`.
 
@@ -735,9 +738,10 @@ Freebox Watcher can send downtime alerts via Telegram. This is optional but high
 1. Start a conversation with your newly created bot by clicking the link provided by BotFather or searching for your bot's username
 2. Send any message to your bot (e.g., "Hello")
 3. Visit the following URL in your browser (replace `<YOUR_BOT_TOKEN>` with your actual bot token):
-    ```
-    https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
-    ```
+
+   ```
+   https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+   ```
 4. Look for the `chat` object in the JSON response and copy the `id` value (e.g., `123456789`)
 5. Set this ID as `TELEGRAM_CHAT_ID` in your `.env` file
 

@@ -1,7 +1,7 @@
 import { describe, it, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { NotificationService } from '../src/services/notification.js';
+import { NotificationService, TELEGRAM_TRANSPORT_OPTIONS } from '../src/services/notification.js';
 
 describe('NotificationService', () => {
     let fastify: FastifyInstance;
@@ -415,6 +415,104 @@ describe('NotificationService', () => {
         it('should format days with only seconds (no hours or minutes)', () => {
             const result = (service as any).formatDuration(86415); // 1d 0h 0m 15s
             assert.strictEqual(result, '1d 15s');
+        });
+    });
+
+    describe('Telegram transport bounds', () => {
+        const sendMessage = (service: NotificationService): Promise<boolean> =>
+            (service as any).sendMessage('bounded message');
+
+        beforeEach(() => {
+            process.env.TELEGRAM_BOT_TOKEN = 'test-bot-token-12345';
+            process.env.TELEGRAM_CHAT_ID = '123456789';
+        });
+
+        it('should give the bounded transport options to the Telegram client by default', () => {
+            const service = new NotificationService(fastify.log);
+
+            // Library internal: breaks loudly if the transport fields are renamed
+            const transport = (service as any).bot.transport;
+            assert.strictEqual(transport.timeoutMs, 10_000);
+            assert.strictEqual(transport.maxRetries, 2);
+            assert.strictEqual(transport.maxRetryAfterMs, 60_000);
+        });
+
+        it('should send the message through the configured transport', async () => {
+            const requests: Array<{ url: string; body: Record<string, string> }> = [];
+            const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+                // The library sends ordinary calls as application/x-www-form-urlencoded
+                const body = Object.fromEntries(init?.body as URLSearchParams);
+                requests.push({ url: String(url), body });
+                return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }));
+            }) as typeof fetch;
+            const service = new NotificationService(fastify.log, {
+                ...TELEGRAM_TRANSPORT_OPTIONS,
+                fetch: fakeFetch,
+            });
+
+            assert.strictEqual(await sendMessage(service), true);
+            assert.strictEqual(requests.length, 1);
+            assert.match(requests[0].url, /\/sendMessage$/);
+            assert.deepStrictEqual(requests[0].body, {
+                chat_id: '123456789',
+                text: 'bounded message',
+                parse_mode: 'Markdown',
+            });
+        });
+
+        it('should give up after the timeout and retries instead of hanging', async () => {
+            let attempts = 0;
+            const hangingFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+                attempts++;
+                return new Promise<Response>((_resolve, reject) => {
+                    init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+                        once: true,
+                    });
+                });
+            }) as typeof fetch;
+            const service = new NotificationService(fastify.log, {
+                ...TELEGRAM_TRANSPORT_OPTIONS,
+                timeoutMs: 50,
+                maxRetries: 1,
+                retryBackoffMs: 1,
+                fetch: hangingFetch,
+            });
+
+            // AbortSignal.timeout() timers do not keep the event loop alive on their own
+            const keepAlive = setTimeout(() => {}, 5_000);
+            const startedAt = Date.now();
+            try {
+                assert.strictEqual(await sendMessage(service), false);
+            } finally {
+                clearTimeout(keepAlive);
+            }
+            assert.strictEqual(attempts, 2);
+            assert.ok(Date.now() - startedAt < 1_000, 'Telegram call should not hang');
+        });
+
+        it('should not wait for a rate-limit retry_after longer than the cap', async () => {
+            let attempts = 0;
+            const rateLimitedFetch = (async () => {
+                attempts++;
+                return new Response(
+                    JSON.stringify({
+                        ok: false,
+                        error_code: 429,
+                        description: 'Too Many Requests: retry after 120',
+                        parameters: { retry_after: 120 },
+                    }),
+                    { status: 429 }
+                );
+            }) as typeof fetch;
+            const service = new NotificationService(fastify.log, {
+                ...TELEGRAM_TRANSPORT_OPTIONS,
+                fetch: rateLimitedFetch,
+            });
+
+            const startedAt = Date.now();
+            assert.strictEqual(await sendMessage(service), false);
+            assert.strictEqual(attempts, 1);
+            assert.ok(Date.now() - startedAt < 1_000, 'Long flood-wait should not be honored');
         });
     });
 });

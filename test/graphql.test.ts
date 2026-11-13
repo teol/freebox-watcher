@@ -7,8 +7,8 @@ import { loadGraphqlConfig } from '../src/graphql/config.js';
 import { createApp } from '../src/app.js';
 import { API_PREFIX } from '../src/constants/api.js';
 import { hashToken } from '../src/middleware/bearerAuth.js';
-import { type HeartbeatRecord } from '../src/services/heartbeat.js';
-import { type DowntimeEvent } from '../src/services/downtime.js';
+import type { HeartbeatRecord } from '../src/services/heartbeat.js';
+import type { DowntimeEvent } from '../src/services/downtime.js';
 
 interface GraphqlResponseBody {
     data?: Record<string, unknown> | null;

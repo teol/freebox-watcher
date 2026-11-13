@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './src/utils/loadEnv.js';
 import type { Knex } from 'knex';
 
 const config: Knex.Config = {

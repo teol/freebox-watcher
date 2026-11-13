@@ -122,7 +122,7 @@ describe('DowntimeMonitor', () => {
         });
     });
 
-    it('should cleanup on stop', (t, done) => {
+    it('should cleanup on stop', (_t, done) => {
         const monitor = new DowntimeMonitor(fastify.log, notificationService);
 
         monitor.start();

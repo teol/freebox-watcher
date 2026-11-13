@@ -12,8 +12,8 @@ import {
     GraphQLString,
     Kind,
 } from 'graphql';
-import { type HeartbeatService, type HeartbeatSummary } from '../services/heartbeat.js';
-import { type DowntimeEvent, type DowntimeService } from '../services/downtime.js';
+import type { HeartbeatService, HeartbeatSummary } from '../services/heartbeat.js';
+import type { DowntimeEvent, DowntimeService } from '../services/downtime.js';
 
 /**
  * Maximum number of items returned by a paginated field

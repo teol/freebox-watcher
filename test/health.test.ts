@@ -889,7 +889,7 @@ describe('HealthMonitor review regressions', () => {
         notificationService = new NotificationService(fastify.log);
         notificationService.isEnabled = () => true;
         notificationService.sendHealthAlert = async (report: HealthReport) => {
-            const delivered = deliveries.length > 0 ? deliveries.shift()! : true;
+            const delivered = deliveries.shift() ?? true;
             if (delivered) {
                 sentReports.push(report);
             }

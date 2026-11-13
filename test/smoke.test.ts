@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { createApp } from '../src/app.js';
 import { API_PREFIX } from '../src/constants/api.js';
 

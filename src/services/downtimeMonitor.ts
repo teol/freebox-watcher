@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import heartbeatService from './heartbeat.js';
 import downtimeService from './downtime.js';
-import { NotificationService } from './notification.js';
+import type { NotificationService } from './notification.js';
 
 /**
  * DowntimeMonitor periodically checks for downtime conditions
