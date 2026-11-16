@@ -51,7 +51,7 @@
         "node-telegram-bot-api": "2.1.0",
         "pino": "^10.4.0",
         "pino-pretty": "^13.2.0",
-        "rotating-file-stream": "^3.2.10"
+        "rotating-file-stream": "^4.0.0"
     },
     "devDependencies": {
         "@biomejs/biome": "2.6.7",

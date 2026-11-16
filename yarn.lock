@@ -1010,7 +1010,7 @@ __metadata:
     node-telegram-bot-api: "npm:2.1.0"
     pino: "npm:^10.4.0"
     pino-pretty: "npm:^13.2.0"
-    rotating-file-stream: "npm:^3.2.10"
+    rotating-file-stream: "npm:^4.0.0"
     tsx: "npm:^4.23.15"
     typescript: "npm:^6.0.3"
   languageName: unknown
@@ -1947,10 +1947,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rotating-file-stream@npm:^3.2.10":
-  version: 3.2.10
-  resolution: "rotating-file-stream@npm:3.2.10"
-  checksum: 10c0/45a9cf3090175b8289c10e283c9f6ef56386588f0eafde2156596a472c0794afa786fbd39fa266c717e6dec7eb798602922ca4b847f2e5bf4609960da5a3debf
+"rotating-file-stream@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "rotating-file-stream@npm:4.0.0"
+  checksum: 10c0/9cb89c579987fc694d681a7b45e6c0c9a224c39464f52cf5d443b24d0af98c22af4c98aad5a5779f2958c9ed16b51512a9f0dce14553471c0d7e0031a60f7b51
   languageName: node
   linkType: hard
 
