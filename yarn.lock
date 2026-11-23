@@ -5,20 +5,20 @@ __metadata:
   version: 10
   cacheKey: 10c0
 
-"@biomejs/biome@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/biome@npm:2.6.7"
+"@biomejs/biome@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/biome@npm:2.6.8"
   dependencies:
-    "@biomejs/cli-android-arm64": "npm:2.6.7"
-    "@biomejs/cli-android-x64": "npm:2.6.7"
-    "@biomejs/cli-darwin-arm64": "npm:2.6.7"
-    "@biomejs/cli-darwin-x64": "npm:2.6.7"
-    "@biomejs/cli-linux-arm64": "npm:2.6.7"
-    "@biomejs/cli-linux-arm64-musl": "npm:2.6.7"
-    "@biomejs/cli-linux-x64": "npm:2.6.7"
-    "@biomejs/cli-linux-x64-musl": "npm:2.6.7"
-    "@biomejs/cli-win32-arm64": "npm:2.6.7"
-    "@biomejs/cli-win32-x64": "npm:2.6.7"
+    "@biomejs/cli-android-arm64": "npm:2.6.8"
+    "@biomejs/cli-android-x64": "npm:2.6.8"
+    "@biomejs/cli-darwin-arm64": "npm:2.6.8"
+    "@biomejs/cli-darwin-x64": "npm:2.6.8"
+    "@biomejs/cli-linux-arm64": "npm:2.6.8"
+    "@biomejs/cli-linux-arm64-musl": "npm:2.6.8"
+    "@biomejs/cli-linux-x64": "npm:2.6.8"
+    "@biomejs/cli-linux-x64-musl": "npm:2.6.8"
+    "@biomejs/cli-win32-arm64": "npm:2.6.8"
+    "@biomejs/cli-win32-x64": "npm:2.6.8"
   dependenciesMeta:
     "@biomejs/cli-android-arm64":
       optional: true
@@ -42,76 +42,76 @@ __metadata:
       optional: true
   bin:
     biome: bin/biome
-  checksum: 10c0/2ad0a8076ce352386dd14f6170eb1ddd8e9ef5b21d6b195a0b92e0a0216b541b85d51eb41432767d00f756c20c47960ca50c475369626117c9e4dc4d12174f91
+  checksum: 10c0/0a8e2a3ec88ca75221aaeef2bd0bd9ab5e50b405e1365c41078e52af6f97f17f57934998c3cc87d3212726155c3766b10eb65c992c539a465fce6efda2fc06d0
   languageName: node
   linkType: hard
 
-"@biomejs/cli-android-arm64@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-android-arm64@npm:2.6.7"
+"@biomejs/cli-android-arm64@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-android-arm64@npm:2.6.8"
   conditions: os=android & cpu=arm64
   languageName: node
   linkType: hard
 
-"@biomejs/cli-android-x64@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-android-x64@npm:2.6.7"
+"@biomejs/cli-android-x64@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-android-x64@npm:2.6.8"
   conditions: os=android & cpu=x64
   languageName: node
   linkType: hard
 
-"@biomejs/cli-darwin-arm64@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-darwin-arm64@npm:2.6.7"
+"@biomejs/cli-darwin-arm64@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-darwin-arm64@npm:2.6.8"
   conditions: os=darwin & cpu=arm64
   languageName: node
   linkType: hard
 
-"@biomejs/cli-darwin-x64@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-darwin-x64@npm:2.6.7"
+"@biomejs/cli-darwin-x64@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-darwin-x64@npm:2.6.8"
   conditions: os=darwin & cpu=x64
   languageName: node
   linkType: hard
 
-"@biomejs/cli-linux-arm64-musl@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-linux-arm64-musl@npm:2.6.7"
+"@biomejs/cli-linux-arm64-musl@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-linux-arm64-musl@npm:2.6.8"
   conditions: os=linux & cpu=arm64 & libc=musl
   languageName: node
   linkType: hard
 
-"@biomejs/cli-linux-arm64@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-linux-arm64@npm:2.6.7"
+"@biomejs/cli-linux-arm64@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-linux-arm64@npm:2.6.8"
   conditions: os=linux & cpu=arm64 & libc=glibc
   languageName: node
   linkType: hard
 
-"@biomejs/cli-linux-x64-musl@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-linux-x64-musl@npm:2.6.7"
+"@biomejs/cli-linux-x64-musl@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-linux-x64-musl@npm:2.6.8"
   conditions: os=linux & cpu=x64 & libc=musl
   languageName: node
   linkType: hard
 
-"@biomejs/cli-linux-x64@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-linux-x64@npm:2.6.7"
+"@biomejs/cli-linux-x64@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-linux-x64@npm:2.6.8"
   conditions: os=linux & cpu=x64 & libc=glibc
   languageName: node
   linkType: hard
 
-"@biomejs/cli-win32-arm64@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-win32-arm64@npm:2.6.7"
+"@biomejs/cli-win32-arm64@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-win32-arm64@npm:2.6.8"
   conditions: os=win32 & cpu=arm64
   languageName: node
   linkType: hard
 
-"@biomejs/cli-win32-x64@npm:2.6.7":
-  version: 2.6.7
-  resolution: "@biomejs/cli-win32-x64@npm:2.6.7"
+"@biomejs/cli-win32-x64@npm:2.6.8":
+  version: 2.6.8
+  resolution: "@biomejs/cli-win32-x64@npm:2.6.8"
   conditions: os=win32 & cpu=x64
   languageName: node
   linkType: hard
@@ -632,12 +632,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cron-parser@npm:^5.10.4":
-  version: 5.10.4
-  resolution: "cron-parser@npm:5.10.4"
+"cron-parser@npm:^5.10.6":
+  version: 5.10.6
+  resolution: "cron-parser@npm:5.10.6"
   dependencies:
     luxon: "npm:^3.7.2"
-  checksum: 10c0/4d672375cab88bcb886f914b545717a675d1fcdfcac5ca362b2cbbf34c60423271ae9893b280270a945ba8ed2f1a257f674de44e175bbad522218b98a8d48bc7
+  checksum: 10c0/0f56904065b2aa678d1cea66f3667ee646b006b5c68c386ec61e5241f4d5ebbdb8d1afcd614e60abe261dbf47b811315de411111ac93ea6e9261634e078f8218
   languageName: node
   linkType: hard
 
@@ -996,18 +996,18 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "freebox-watcher@workspace:."
   dependencies:
-    "@biomejs/biome": "npm:2.6.7"
+    "@biomejs/biome": "npm:2.6.8"
     "@fastify/rate-limit": "npm:^11.2.2"
     "@types/node": "npm:^26.6.6"
     chart.js: "npm:^4.6.1"
     chartjs-node-canvas: "npm:^5.0.0"
-    cron-parser: "npm:^5.10.4"
+    cron-parser: "npm:^5.10.6"
     fastify: "npm:^5.12.8"
     graphql: "npm:^17.1.0"
     knex: "npm:^3.3.0"
     mysql2: "npm:^3.23.3"
     node-cron: "npm:^4.6.0"
-    node-telegram-bot-api: "npm:2.1.0"
+    node-telegram-bot-api: "npm:2.4.0"
     pino: "npm:^10.4.0"
     pino-pretty: "npm:^13.2.0"
     rotating-file-stream: "npm:^3.2.10"
@@ -1591,10 +1591,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"node-telegram-bot-api@npm:2.1.0":
-  version: 2.1.0
-  resolution: "node-telegram-bot-api@npm:2.1.0"
-  checksum: 10c0/6191c35b5a3697d8c97a5629880c4b391081d43866ca0ae0cc7179cd8fbaf1ebc809346a45055abcac19a815ef83ffd10af2f41795617f3c879086fe74613ed9
+"node-telegram-bot-api@npm:2.4.0":
+  version: 2.4.0
+  resolution: "node-telegram-bot-api@npm:2.4.0"
+  checksum: 10c0/2b163cb462f1ea6ef7bd91f253d63f30531651bf6738a5a35de80e82a8c9639f49792319b8e1f37f278d21c95c8c3b615d0c26b02b8d4e0abdf67902a429b16c
   languageName: node
   linkType: hard
 
